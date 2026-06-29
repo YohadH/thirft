@@ -34,6 +34,31 @@ Be precise about the split:
 - **MCP manages memory recall and token receipts.**
 - **`thrift-proxy` manages live request trimming and rate-limit retries.**
 
+## How It Compares
+
+Mature memory layers — [Mem0](https://github.com/mem0ai/mem0), [Zep](https://www.getzep.com/),
+[Letta](https://www.letta.com/), [Cognee](https://www.cognee.ai/) — optimize **recall
+quality**: LLM-enriched writes, temporal or entity knowledge graphs, deep
+personalization. They are excellent at that, and far more battle-tested than this
+project. Thrift Memory does not try to beat them on recall depth.
+
+Thrift optimizes a different axis: **cost, locally, with proof.** The tradeoffs:
+
+| | Thrift Memory | Quality-first layers (Mem0 / Zep / Letta / Cognee) |
+| --- | --- | --- |
+| Primary goal | Cut & **prove** token cost (budget + savings receipt) | Maximize recall quality / reasoning |
+| Write path | Cheap — no mandatory LLM enrichment | Often LLM extraction/embedding on write |
+| Install | `npx thrift-memory` — one dependency, local JSONL, **no API key, no DB, no Docker** | Typically an LLM key + a vector/graph DB (e.g. Mem0 self-host: API + Postgres/pgvector + Neo4j) |
+| Dashboard | **Token-savings meter** + owner controls, local & read/write | Memory/agent-management UIs (several have one; different purpose) |
+| Recall depth | Scoped match under a hard token budget | Knowledge-graph / temporal / semantic ranking |
+| Maturity | Early `0.0.x` | Production-grade, widely adopted |
+
+Honest summary: if you need the smartest possible recall, use one of the others.
+If you run a **fleet of agents** that keep re-paying to reload broad context and you
+want to **measure and cap that cost** with no extra infrastructure, that gap is what
+Thrift fills. The two are not mutually exclusive — Thrift can sit in front of a
+heavier store as the budget/metering layer.
+
 ## MCP Tools
 
 ```text
