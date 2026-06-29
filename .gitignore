@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+coverage/
+*.tsbuildinfo
+
+# Local memory stores / scratch data
+*.thrift.db
+*.thrift.jsonl
+/.thrift-data/
+/memory/
+/tmp/
+
+# Private launch, evaluation, and local design artifacts.
+/.quality*/
+/qa/
+/drafts/
+/*LAUNCH-DRAFT.md
+/DESIGN*.md
+/benchmark/results.md

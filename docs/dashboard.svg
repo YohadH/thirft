@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-label="Thrift savings dashboard screenshot">
+  <rect width="1280" height="720" fill="#f7f8f5"/>
+  <text x="48" y="58" font-family="Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#1d2522">Savings Dashboard</text>
+  <text x="48" y="84" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#66706b">Live totals from the MCP/proxy meter log. Baseline is full context; injected is what Thrift sent.</text>
+  <g transform="translate(48 120)">
+    <rect width="280" height="112" rx="8" fill="#ffffff" stroke="#dfe4df"/>
+    <text x="18" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">SAVINGS RATE</text>
+    <text x="18" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#0f766e">79.4%</text>
+    <text x="18" y="96" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">1,382 saved of 1,740 baseline</text>
+  </g>
+  <g transform="translate(348 120)">
+    <rect width="280" height="112" rx="8" fill="#ffffff" stroke="#dfe4df"/>
+    <text x="18" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">SAVED TOKENS</text>
+    <text x="18" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#1d2522">1,382</text>
+    <text x="18" y="96" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">1,740 baseline / 358 injected</text>
+  </g>
+  <g transform="translate(648 120)">
+    <rect width="280" height="112" rx="8" fill="#ffffff" stroke="#dfe4df"/>
+    <text x="18" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">METERED RUNS</text>
+    <text x="18" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#1d2522">5</text>
+    <text x="18" y="96" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">3 metered agents</text>
+  </g>
+  <g transform="translate(948 120)">
+    <rect width="280" height="112" rx="8" fill="#ffffff" stroke="#dfe4df"/>
+    <text x="18" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">MEMORIES</text>
+    <text x="18" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="34" font-weight="700" fill="#1d2522">6</text>
+    <text x="18" y="96" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">Kill-switch off</text>
+  </g>
+  <g transform="translate(48 260)">
+    <rect width="760" height="260" rx="8" fill="#ffffff" stroke="#dfe4df"/>
+    <text x="18" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#1d2522">Daily Token Flow</text>
+    <text x="620" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">last 30 active days</text>
+    <line x1="60" y1="215" x2="700" y2="215" stroke="#dfe4df"/>
+    <rect x="165" y="126" width="22" height="89" rx="4" fill="#dbeee7"/>
+    <rect x="375" y="145" width="22" height="70" rx="4" fill="#dbeee7"/>
+    <rect x="585" y="104" width="22" height="111" rx="4" fill="#dbeee7"/>
+    <polyline points="70,178 176,102 386,132 596,76 690,112" fill="none" stroke="#b45309" stroke-width="4" stroke-linejoin="round"/>
+    <polyline points="70,206 176,191 386,197 596,188 690,195" fill="none" stroke="#0f766e" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="596" cy="76" r="5" fill="#b45309"/>
+    <circle cx="596" cy="188" r="5" fill="#0f766e"/>
+    <rect x="504" y="72" width="190" height="112" rx="8" fill="#ffffff" stroke="#cbd8d1"/>
+    <text x="518" y="96" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="700" fill="#1d2522">2025-10-09</text>
+    <text x="518" y="120" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">Baseline</text>
+    <text x="650" y="120" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#1d2522" text-anchor="end">420</text>
+    <text x="518" y="142" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">Injected</text>
+    <text x="650" y="142" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#1d2522" text-anchor="end">76</text>
+    <text x="518" y="164" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">Saved</text>
+    <text x="650" y="164" font-family="Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" fill="#1d2522" text-anchor="end">344</text>
+  </g>
+  <g transform="translate(832 260)">
+    <rect width="396" height="260" rx="8" fill="#ffffff" stroke="#dfe4df"/>
+    <text x="18" y="32" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#1d2522">Agent Savings</text>
+    <text x="18" y="76" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1d2522">developer</text>
+    <rect x="110" y="66" width="210" height="9" rx="4" fill="#edf0eb"/>
+    <rect x="110" y="66" width="210" height="9" rx="4" fill="#2f855a"/>
+    <text x="350" y="76" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b" text-anchor="end">984 saved</text>
+    <text x="18" y="116" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1d2522">qa</text>
+    <rect x="110" y="106" width="210" height="9" rx="4" fill="#edf0eb"/>
+    <rect x="110" y="106" width="46" height="9" rx="4" fill="#2f855a"/>
+    <text x="350" y="116" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b" text-anchor="end">216 saved</text>
+    <text x="18" y="156" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#1d2522">writer</text>
+    <rect x="110" y="146" width="210" height="9" rx="4" fill="#edf0eb"/>
+    <rect x="110" y="146" width="39" height="9" rx="4" fill="#2f855a"/>
+    <text x="350" y="156" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b" text-anchor="end">182 saved</text>
+  </g>
+  <text x="48" y="676" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#66706b">Synthetic data for documentation. Use the local dashboard to inspect your own meter receipts.</text>
+</svg>

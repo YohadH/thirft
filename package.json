@@ -1,0 +1,64 @@
+{
+  "name": "thrift-memory",
+  "version": "0.0.1",
+  "description": "Cost-first memory layer for AI agent fleets — loads only the context each agent needs, meters every token, and proves the savings.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "benchmark",
+    "docs",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "thrift-memory": "./dist/mcp/bin.js",
+    "thrift-proxy": "./dist/proxy/bin.js",
+    "thrift-panel": "./dist/control/bin.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "start:mcp": "node dist/mcp/bin.js",
+    "start:proxy": "node dist/proxy/bin.js",
+    "start:panel": "node dist/control/bin.js",
+    "start:ui": "node dist/control/bin.js serve",
+    "import:memories": "node scripts/import-memories.mjs",
+    "import:memories:dry": "node scripts/import-memories.mjs --dry-run",
+    "import:memories:reset": "node scripts/import-memories.mjs --clear"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "memory",
+    "llm",
+    "token",
+    "cost",
+    "context",
+    "fleet",
+    "mcp"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

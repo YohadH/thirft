@@ -1,0 +1,5 @@
+{"at":1760000000000,"agentId":"developer","injectedTokens":78,"baselineTokens":390,"savedTokens":312}
+{"at":1760003600000,"agentId":"developer","injectedTokens":82,"baselineTokens":410,"savedTokens":328}
+{"at":1760010000000,"agentId":"qa","injectedTokens":64,"baselineTokens":280,"savedTokens":216}
+{"at":1760090000000,"agentId":"writer","injectedTokens":58,"baselineTokens":240,"savedTokens":182}
+{"at":1760093600000,"agentId":"developer","injectedTokens":76,"baselineTokens":420,"savedTokens":344}
