@@ -18,4 +18,5 @@ coverage/
 /drafts/
 /*LAUNCH-DRAFT.md
 /DESIGN*.md
+/USER-GUIDE.md
 /benchmark/results.md
