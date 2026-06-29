@@ -1,16 +1,16 @@
 {
   "name": "thrift-memory",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Cost-first memory layer for AI agent fleets - loads only the context each agent needs, meters every token, and proves the savings.",
   "license": "Apache-2.0",
   "author": "Yohad Hakim <yoadhakimv@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YohadH/thirft.git"
+    "url": "git+https://github.com/YohadH/thrift-memory.git"
   },
-  "homepage": "https://github.com/YohadH/thirft#readme",
+  "homepage": "https://github.com/YohadH/thrift-memory#readme",
   "bugs": {
-    "url": "https://github.com/YohadH/thirft/issues"
+    "url": "https://github.com/YohadH/thrift-memory/issues"
   },
   "type": "module",
   "main": "./dist/index.js",

@@ -1,9 +1,12 @@
-# Thrift
+# Thrift Memory
 
-**Cost-first memory for AI agent teams.**
+**Cost-first memory for AI agent teams.** (npm: [`thrift-memory`](https://www.npmjs.com/package/thrift-memory))
 
-Thrift gives MCP-capable agents a small shared memory layer that optimizes for
-cost visibility: store memories cheaply, recall only the relevant slice under a
+> Not affiliated with [Apache Thrift](https://thrift.apache.org/), the RPC framework.
+> This is an MCP memory layer for AI agents.
+
+Thrift Memory gives MCP-capable agents a small shared memory layer that optimizes
+for cost visibility: store memories cheaply, recall only the relevant slice under a
 hard token budget, and log a receipt for every recall.
 
 ```text
@@ -73,6 +76,43 @@ npx thrift-memory \
   --default-budget=2000
 ```
 
+## 60-Second Demo
+
+No agent required — prove the `remember → recall → receipt` loop with the library.
+Save as `demo.mjs` after `npm install thrift-memory`, then `node demo.mjs`:
+
+```js
+import { JsonlStore, ScopedRetriever } from "thrift-memory";
+
+const store = new JsonlStore({ path: "./demo.jsonl" });
+const now = Date.now();
+
+// 1. remember — store a few org memories (cheap, no LLM enrichment)
+store.add({ scope: "org", text: "All money values are stored as integer cents, never floats." }, now);
+store.add({ scope: "org", text: "We deploy only on green CI; no Friday-evening releases." }, now);
+store.add({ scope: "org", text: "Postgres is the system of record; Redis is cache-only." }, now);
+
+// 2. recall — load only what the task needs, under a hard token budget
+const r = new ScopedRetriever().recall(store, {
+  agentId: "dev",
+  task: "how should I store currency amounts?",
+  tokenBudget: 40,
+});
+
+// 3. receipt
+for (const m of r.memories) console.log("•", m.text);
+console.log(`injected ${r.injectedTokens} / baseline ${r.baselineTokens} (saved ${r.savedTokens})`);
+```
+
+```text
+• All money values are stored as integer cents, never floats.
+• We deploy only on green CI; no Friday-evening releases.
+injected 29 / baseline 43 (saved 14)
+```
+
+The third memory was dropped because it didn't fit the 40-token budget — that gap
+(`baseline - injected`) is exactly what you stop paying for on every run.
+
 ## Dashboard
 
 The optional dashboard is local and read-only. It shows whether Thrift is really
@@ -138,6 +178,14 @@ For a credible public report, publish both token reduction and quality evidence.
 For example: "saved 72% of memory tokens across 200 real recalls, with 19/20
 paired tasks producing the same outcome."
 
+> **Account for the MCP overhead.** Registering any MCP server adds its tool-schema
+> load to each agent's context (often several thousand tokens). The honest figure is
+> **net**: `savings = recall reduction − MCP schema/tool-call overhead`. On a
+> context-heavy agent that reloads broad memory every run, recall usually wins by a
+> wide margin — but confirm it with the meter on your own workload before going
+> fleet-wide, rather than assuming. The receipts exist precisely so you don't have to
+> guess.
+
 ## Synthetic Benchmark
 
 This repo includes a small synthetic fixture so users can verify the measurement
@@ -160,6 +208,12 @@ interpret the numbers.
 
 The proxy is optional. Use it when an agent can point its LLM `base_url` at a
 local HTTP gateway.
+
+> **Security — run it locally only.** The proxy forwards your real provider API
+> key upstream unchanged. Bind it to `127.0.0.1` (the default) and never expose it
+> on a public interface or share the port. It is a single-tenant developer tool, not
+> a hardened multi-tenant gateway. Responses are also buffered, so SSE streaming is
+> not passed through yet.
 
 ```bash
 npx thrift-proxy \
