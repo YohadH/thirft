@@ -107,6 +107,46 @@ describe("ScopedRetriever budget + receipt", () => {
     expect(out.savedTokens).toBe(20);
   });
 
+  it("relevance floor: drops zero-overlap memories when the task has terms (even if they fit)", () => {
+    const s = new JsonlStore();
+    s.add({ scope: "org", text: "the login authentication flow uses oauth tokens" }, T0);
+    s.add({ scope: "org", text: "kubernetes deployment manifests and helm charts" }, T0 + 1);
+    const out = new ScopedRetriever().recall(s, {
+      agentId: "dev",
+      task: "debug the login oauth problem",
+      tokenBudget: 10_000, // ample room for both — only relevance should exclude one
+    });
+    const texts = out.memories.map((m) => m.text);
+    expect(texts).toContain("the login authentication flow uses oauth tokens");
+    expect(texts.some((t) => t.includes("kubernetes"))).toBe(false); // zero overlap, excluded
+    // Baseline still counts the full in-scope set, so the irrelevant memory's
+    // tokens are credited as savings, not silently dropped from the receipt.
+    expect(out.baselineTokens).toBeGreaterThan(out.injectedTokens);
+    expect(out.savedTokens).toBe(out.baselineTokens - out.injectedTokens);
+  });
+
+  it("relevance floor is OFF when there is no task text (pack by recency under budget)", () => {
+    const s = new JsonlStore();
+    s.add({ scope: "org", text: "x".repeat(40) }, T0);
+    s.add({ scope: "org", text: "y".repeat(40) }, T0 + 1);
+    const out = new ScopedRetriever().recall(s, { agentId: "dev", tokenBudget: 10_000 });
+    expect(out.memories).toHaveLength(2); // no task → nothing to be (ir)relevant to
+  });
+
+  it("pinned memories bypass the relevance floor", () => {
+    const s = new JsonlStore();
+    s.add({ scope: "org", text: "PINNED house rule never push to git", pinned: true }, T0);
+    s.add({ scope: "org", text: "the login oauth authentication flow" }, T0 + 1);
+    const out = new ScopedRetriever().recall(s, {
+      agentId: "dev",
+      task: "login oauth",
+      tokenBudget: 10_000,
+    });
+    const texts = out.memories.map((m) => m.text);
+    expect(texts.some((t) => t.includes("PINNED house rule"))).toBe(true); // pinned, zero overlap, kept
+    expect(texts.some((t) => t.includes("login oauth"))).toBe(true);
+  });
+
   it("excludes disabled memories entirely", () => {
     const s = new JsonlStore();
     const m = s.add({ scope: "org", text: "disabled secret note" }, T0);

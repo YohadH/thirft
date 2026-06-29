@@ -63,6 +63,23 @@ describe("trimContext budget + receipt", () => {
     expect(content).toContain("trimmed by thrift");
   });
 
+  it("honest receipt: never reports savings it didn't make on non-truncatable block content", () => {
+    // An essential message whose content is a content-block ARRAY (Anthropic/OpenAI
+    // shape) that alone busts the budget. truncateContent only shrinks strings, so
+    // this block array is forwarded WHOLE. The receipt must reflect that — injected
+    // == the real forwarded cost, savings == 0 — not the budget-time wishful number.
+    const blocks = [{ type: "text", text: "Q".repeat(400) }]; // ~100 tok of text
+    const req = { messages: [{ role: "user", content: blocks }] };
+    const out = trimContext(req, { tokenBudget: 20 });
+
+    // The block array was forwarded unchanged (we cannot safely truncate structure).
+    expect(out.request.messages![0].content).toEqual(blocks);
+    // So the receipt is honest: full cost injected, nothing actually saved.
+    expect(out.injectedTokens).toBe(out.baselineTokens);
+    expect(out.savedTokens).toBe(0);
+    expect(out.compressed).toBe(false); // forwarded whole → not a real compression
+  });
+
   it("passes a within-budget request through untouched (zero savings)", () => {
     const req = { messages: [{ role: "user", content: "hi" }] };
     const out = trimContext(req, { tokenBudget: 1_000 });
@@ -166,6 +183,22 @@ describe("ThriftProxy HTTP surface (live socket, stubbed upstream)", () => {
     } finally {
       await proxy.close();
     }
+  });
+
+  it("binds to 127.0.0.1 by default (key-forwarding proxy must not be reachable off-host)", async () => {
+    const proxy = new ThriftProxy({ upstreamBaseUrl: "https://example.com", tokenBudget: 100 });
+    await proxy.listen(0);
+    const addr = (proxy as unknown as { server: { address(): { address: string } } }).server.address();
+    expect(addr.address).toBe("127.0.0.1");
+    await proxy.close();
+  });
+
+  it("honors an explicit bind host for deliberate exposure", async () => {
+    const proxy = new ThriftProxy({ upstreamBaseUrl: "https://example.com", tokenBudget: 100 });
+    await proxy.listen(0, "0.0.0.0");
+    const addr = (proxy as unknown as { server: { address(): { address: string } } }).server.address();
+    expect(addr.address).toBe("0.0.0.0");
+    await proxy.close();
   });
 
   it("answers the health check", async () => {

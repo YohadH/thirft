@@ -38,6 +38,7 @@ export interface JsonlStoreOptions {
 export class JsonlStore implements MemoryStore {
   private readonly records = new Map<string, MemoryRecord>();
   private readonly path?: string;
+  private readonly skippedLines: number[] = [];
 
   constructor(opts: JsonlStoreOptions = {}) {
     this.path = opts.path;
@@ -124,12 +125,27 @@ export class JsonlStore implements MemoryStore {
   private load(): void {
     if (!this.path || !existsSync(this.path)) return;
     const raw = readFileSync(this.path, "utf8");
+    let lineNo = 0;
     for (const line of raw.split("\n")) {
+      lineNo++;
       if (!line.trim()) continue;
-      const entry = JSON.parse(line) as LogEntry;
-      if (entry.op === "put") this.records.set(entry.record.id, entry.record);
-      else this.records.delete(entry.id);
+      // A single corrupt line (e.g. a half-written record from a crash mid-append)
+      // must not brick the whole store. Skip it and keep replaying the rest.
+      let entry: LogEntry;
+      try {
+        entry = JSON.parse(line) as LogEntry;
+      } catch {
+        this.skippedLines.push(lineNo);
+        continue;
+      }
+      if (entry && entry.op === "put") this.records.set(entry.record.id, entry.record);
+      else if (entry && entry.op === "del") this.records.delete(entry.id);
     }
+  }
+
+  /** Line numbers skipped during load() because they failed to parse (corrupt log lines). */
+  get corruptLinesSkipped(): number[] {
+    return [...this.skippedLines];
   }
 
   /**

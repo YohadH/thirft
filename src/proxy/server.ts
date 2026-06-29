@@ -95,8 +95,14 @@ export class ThriftProxy {
     }
   }
 
-  /** Start listening. Pass 0 for an ephemeral port; resolves with the bound port. */
-  listen(port: number): Promise<number> {
+  /**
+   * Start listening. Pass 0 for an ephemeral port; resolves with the bound port.
+   *
+   * Binds to `127.0.0.1` by default — the proxy forwards your real provider API
+   * key upstream, so it must not be reachable off-host unless you opt in. Pass an
+   * explicit host (e.g. "0.0.0.0") only if you deliberately want to expose it.
+   */
+  listen(port: number, host: string = "127.0.0.1"): Promise<number> {
     this.server = createServer((req, res) => {
       this.handle(req, res).catch((err: unknown) => {
         sendJson(res, 502, { error: "thrift-proxy: " + describe(err) });
@@ -104,7 +110,7 @@ export class ThriftProxy {
     });
     return new Promise((resolve, reject) => {
       this.server!.once("error", reject);
-      this.server!.listen(port, () => {
+      this.server!.listen(port, host, () => {
         const addr = this.server!.address();
         resolve(typeof addr === "object" && addr ? addr.port : port);
       });

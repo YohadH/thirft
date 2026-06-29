@@ -120,7 +120,7 @@ store.add({ scope: "org", text: "Postgres is the system of record; Redis is cach
 // 2. recall — load only what the task needs, under a hard token budget
 const r = new ScopedRetriever().recall(store, {
   agentId: "dev",
-  task: "how should I store currency amounts?",
+  task: "how should I store money values?",
   tokenBudget: 40,
 });
 
@@ -131,12 +131,15 @@ console.log(`injected ${r.injectedTokens} / baseline ${r.baselineTokens} (saved 
 
 ```text
 • All money values are stored as integer cents, never floats.
-• We deploy only on green CI; no Friday-evening releases.
-injected 29 / baseline 43 (saved 14)
+injected 15 / baseline 43 (saved 28)
 ```
 
-The third memory was dropped because it didn't fit the 40-token budget — that gap
-(`baseline - injected`) is exactly what you stop paying for on every run.
+Only the relevant memory is injected — the deploy-cadence and Postgres notes are
+dropped because they don't match the task, not merely because of the budget
+(`recall` applies a relevance floor). That gap, `baseline - injected`, is exactly
+what you stop paying for on every run. Relevance here is lexical overlap, so phrase
+the task with words your memories actually use; an empty result means nothing
+in scope was relevant — which is the honest answer, not noise to pad the budget.
 
 ## Dashboard
 
@@ -238,14 +241,16 @@ The proxy is optional. Use it when an agent can point its LLM `base_url` at a
 local HTTP gateway.
 
 > **Security — run it locally only.** The proxy forwards your real provider API
-> key upstream unchanged. Bind it to `127.0.0.1` (the default) and never expose it
-> on a public interface or share the port. It is a single-tenant developer tool, not
-> a hardened multi-tenant gateway. Responses are also buffered, so SSE streaming is
-> not passed through yet.
+> key upstream unchanged. It binds to `127.0.0.1` by default (enforced in code, not
+> just docs), so it is not reachable off-host unless you deliberately opt in with
+> `--host=0.0.0.0` / `THRIFT_PROXY_HOST`. Never expose it on a public interface or
+> share the port. It is a single-tenant developer tool, not a hardened multi-tenant
+> gateway. Responses are also buffered, so SSE streaming is not passed through yet.
 
 ```bash
 npx thrift-proxy \
   --upstream=https://api.anthropic.com \
+  --host=127.0.0.1 \
   --port=8787 \
   --budget=4000 \
   --meter-path=~/.thrift/meter.jsonl

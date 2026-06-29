@@ -167,15 +167,42 @@ export function trimContext(request: ChatRequest, opts: TrimOptions): TrimResult
   });
   if (request.messages !== undefined) trimmed.messages = keptMessages;
 
+  // 5. HONEST RECEIPT: measure injectedTokens from the request we actually
+  //    forward, not from the packing accumulator. truncateContent only shrinks
+  //    string content — a content-block array is forwarded whole — so the budget-
+  //    time `injectedTokens` could understate the real cost. Recomputing over
+  //    `trimmed` makes `savedTokens` impossible to over-report by construction.
+  const forwardedTokens = contextTokens(trimmed);
+  // `compressed` should mean content actually got smaller, not merely targeted —
+  // a non-truncatable essential block forwarded whole is not a real compression.
+  const reallyCompressed = compressed && forwardedTokens < injectedTokensIfUntruncated(entries, keep);
+
   return {
     request: trimmed,
-    injectedTokens,
+    injectedTokens: forwardedTokens,
     baselineTokens,
-    savedTokens: baselineTokens - injectedTokens,
+    savedTokens: baselineTokens - forwardedTokens,
     kept: keep.size,
     dropped: entries.length - keep.size,
-    compressed,
+    compressed: reallyCompressed,
   };
+}
+
+/** Token cost of a request's context (system block + each message), as forwarded. */
+function contextTokens(req: ChatRequest): number {
+  let t = 0;
+  if (req.system !== undefined && req.system !== null) t += estimateTokens(contentToText(req.system));
+  if (Array.isArray(req.messages)) {
+    for (const m of req.messages) t += estimateTokens(contentToText(m.content));
+  }
+  return t;
+}
+
+/** What the kept set would cost with no truncation — to tell real compression apart. */
+function injectedTokensIfUntruncated(entries: ContextEntry[], keep: Set<ContextEntry>): number {
+  let t = 0;
+  for (const e of entries) if (keep.has(e)) t += e.tokens;
+  return t;
 }
 
 /** Best-effort text extraction for token estimation across content shapes. */

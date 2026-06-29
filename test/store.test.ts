@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -66,6 +66,26 @@ describe("JsonlStore (persistence)", () => {
     const b = new JsonlStore({ path });
     expect(b.get(m.id)?.text).toBe("persist me");
     expect(b.list()).toHaveLength(2); // temp was removed
+  });
+
+  it("skips a corrupt log line instead of crashing the whole load", () => {
+    const rec = (id: string, text: string) =>
+      JSON.stringify({
+        op: "put",
+        record: {
+          id, scope: "org", text, pinned: false, disabled: false,
+          tokens: 1, createdAt: T0, updatedAt: T0,
+        },
+      });
+    // A half-written middle line (e.g. a crash mid-append) sits between two good ones.
+    writeFileSync(path, rec("a", "alpha") + "\n" + '{"op":"put","record":{ oops' + "\n" + rec("b", "bravo") + "\n");
+
+    let s: JsonlStore | undefined;
+    expect(() => (s = new JsonlStore({ path }))).not.toThrow(); // load must survive
+    expect(s!.get("a")?.text).toBe("alpha");
+    expect(s!.get("b")?.text).toBe("bravo"); // the good line AFTER the corrupt one still loads
+    expect(s!.list()).toHaveLength(2);
+    expect(s!.corruptLinesSkipped).toEqual([2]); // the bad line number is recorded
   });
 
   it("compaction preserves live records and drops tombstones", () => {

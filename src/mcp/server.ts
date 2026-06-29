@@ -205,7 +205,7 @@ export class ThriftMcpServer {
     this.meterLogPath = opts.meterLogPath;
     this.resolveBudget = opts.resolveBudget;
     this._server = new Server(
-      { name: "thrift-memory", version: "0.0.3" },
+      { name: "thrift-memory", version: "0.0.4" },
       { capabilities: { tools: {} } },
     );
     this._registerHandlers();

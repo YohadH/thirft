@@ -44,9 +44,20 @@ export class ScopedRetriever implements Retriever {
       return b.updatedAt - a.updatedAt; // newer first on ties
     });
 
+    // Relevance floor: when the task carries query terms, a memory must actually
+    // be relevant (>=1 term overlap) or pinned to be injected. Without this, any
+    // zero-overlap memory rides in just because it fits the budget — diluting the
+    // slice with noise and inflating injectedTokens with context the agent didn't
+    // need. With no task text there's nothing to match on, so we fall back to the
+    // recency-ordered pack (the floor is disabled). Pinned memories always pass
+    // (score includes PIN_BOOST). Baseline stays the full in-scope set, so dropping
+    // an irrelevant memory honestly counts as savings, not a hidden narrowing.
+    const applyFloor = queryTerms.size > 0;
+
     const selected: MemoryRecord[] = [];
     let injectedTokens = 0;
     for (const m of ranked) {
+      if (applyFloor && score(m, queryTerms) === 0) continue; // not relevant, not pinned
       if (injectedTokens + m.tokens > query.tokenBudget) continue; // hard budget
       selected.push(m);
       injectedTokens += m.tokens;
