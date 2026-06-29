@@ -9,7 +9,7 @@
  * behind these exported contracts.
  */
 
-export const VERSION = "0.0.2";
+export const VERSION = "0.0.3";
 
 export type {
   Scope,

@@ -1,6 +1,6 @@
 {
   "name": "thrift-memory",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Cost-first memory layer for AI agent fleets - loads only the context each agent needs, meters every token, and proves the savings.",
   "license": "Apache-2.0",
   "author": "Yohad Hakim <yoadhakimv@gmail.com>",

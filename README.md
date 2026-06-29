@@ -26,7 +26,7 @@ Thrift has three surfaces:
 | Surface | Purpose |
 | --- | --- |
 | MCP server | Agent memory tools: `remember`, `recall`, `search_memory` |
-| Local dashboard | Read-only savings UI backed by the meter JSONL |
+| Local dashboard | Savings UI backed by the meter JSONL, plus owner controls (pin/disable, budgets, kill-switch) |
 | Proxy | Optional HTTP gateway that trims live LLM requests and retries rate limits |
 
 Be precise about the split:
@@ -115,8 +115,11 @@ The third memory was dropped because it didn't fit the 40-token budget — that 
 
 ## Dashboard
 
-The optional dashboard is local and read-only. It shows whether Thrift is really
-saving tokens across real agent runs.
+The optional dashboard is local. It shows whether Thrift is really saving tokens
+across real agent runs, and (as of 0.0.3) exposes a small write surface for owner
+controls — pin/disable a memory, set per-agent budgets, mute an agent, and a
+fleet-wide kill-switch — over local `POST`/`DELETE` endpoints. The same controls
+are available from the `thrift-panel` CLI.
 
 ```bash
 npx thrift-panel serve \

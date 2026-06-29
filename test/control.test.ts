@@ -8,7 +8,8 @@ import { ControlSettings } from "../src/control/settings.js";
 import { ControlPanel } from "../src/control/panel.js";
 import { runCli } from "../src/control/cli.js";
 import { readMeterLog, rollupEventsByAgent } from "../src/control/meterLog.js";
-import { buildDashboardData } from "../src/control/web.js";
+import { buildDashboardData, startDashboardServer } from "../src/control/web.js";
+import type { DashboardServerHandle } from "../src/control/web.js";
 import { ThriftMcpServer } from "../src/mcp/server.js";
 
 const T0 = 1_000_000_000_000;
@@ -422,5 +423,150 @@ describe("control wiring through ThriftMcpServer.resolveBudget", () => {
     const r = srv.recall({ agentId: "dev", task: "anything", tokenBudget: 10_000 }, T0 + 2);
     expect(r.injectedTokens).toBeLessThanOrEqual(20);
     expect(r.baselineTokens).toBeGreaterThan(20); // baseline = full in-scope set, un-clamped
+  });
+});
+
+// ── Dashboard write endpoints (routeDashboardRequest) ─────────────────────────────
+//
+// DES-THRIFT-4 / DES-THRIFT-5: the Memories + Agents pages drive small POST/DELETE
+// endpoints that must persist to the same JSONL store / control.json the live recall
+// path reads. These tests start a real HTTP server and assert the side-effect survives
+// a re-read from a fresh store/settings (round-trip), not just an in-memory toggle.
+
+describe("dashboard write endpoints", () => {
+  let handle: DashboardServerHandle;
+  let memPath: string;
+  let controlPath: string;
+  let meterPath: string;
+
+  async function freshServer() {
+    memPath = join(dir, "memories.jsonl");
+    controlPath = join(dir, "control.json");
+    meterPath = join(dir, "meter.jsonl");
+    const store = new JsonlStore({ path: memPath });
+    const settings = new ControlSettings({ path: controlPath });
+    const panel = new ControlPanel({ store, settings, meterLogPath: meterPath });
+    handle = await startDashboardServer({
+      panel,
+      paths: { storePath: memPath, meterLogPath: meterPath, controlPath },
+      host: "127.0.0.1",
+      port: 0, // ephemeral port
+    });
+    return { store, settings, panel };
+  }
+
+  afterEach(async () => {
+    if (handle) {
+      await new Promise<void>((resolve) => handle.server.close(() => resolve()));
+      handle = undefined as unknown as DashboardServerHandle;
+    }
+  });
+
+  it("POST /api/memory/:id/pin toggles pin and persists to the store", async () => {
+    const { store } = await freshServer();
+    const m = store.add({ scope: "org", text: "pin me" }, T0);
+
+    const on = await fetch(`${handle.url}/api/memory/${m.id}/pin`, { method: "POST" });
+    expect(on.status).toBe(200);
+    expect(await on.json()).toMatchObject({ ok: true, pinned: true });
+    // round-trip: a fresh store replaying the same JSONL sees the pin.
+    expect(new JsonlStore({ path: memPath }).get(m.id)?.pinned).toBe(true);
+
+    const off = await fetch(`${handle.url}/api/memory/${m.id}/pin`, { method: "POST" });
+    expect(await off.json()).toMatchObject({ ok: true, pinned: false });
+    expect(new JsonlStore({ path: memPath }).get(m.id)?.pinned).toBe(false);
+  });
+
+  it("POST /api/memory/:id/disable toggles disabled and persists", async () => {
+    const { store } = await freshServer();
+    const m = store.add({ scope: "agent", agentId: "dev", text: "disable me" }, T0);
+
+    const r = await fetch(`${handle.url}/api/memory/${m.id}/disable`, { method: "POST" });
+    expect(await r.json()).toMatchObject({ ok: true, disabled: true });
+    expect(new JsonlStore({ path: memPath }).get(m.id)?.disabled).toBe(true);
+  });
+
+  it("DELETE /api/memory/:id requires { confirm: true } and then prunes permanently", async () => {
+    const { store } = await freshServer();
+    const m = store.add({ scope: "org", text: "delete me" }, T0);
+
+    const noConfirm = await fetch(`${handle.url}/api/memory/${m.id}`, { method: "DELETE" });
+    expect(noConfirm.status).toBe(400);
+    expect(await noConfirm.json()).toMatchObject({ error: "confirm_required" });
+    expect(store.get(m.id)).toBeDefined(); // still there
+
+    const confirmed = await fetch(`${handle.url}/api/memory/${m.id}`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    expect(await confirmed.json()).toMatchObject({ ok: true, pruned: m.id });
+    expect(new JsonlStore({ path: memPath }).get(m.id)).toBeUndefined(); // gone after replay
+  });
+
+  it("404s a pin/disable/delete on an unknown memory id", async () => {
+    await freshServer();
+    expect((await fetch(`${handle.url}/api/memory/nope/pin`, { method: "POST" })).status).toBe(404);
+    expect((await fetch(`${handle.url}/api/memory/nope/disable`, { method: "POST" })).status).toBe(404);
+    const del = await fetch(`${handle.url}/api/memory/nope`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    expect(del.status).toBe(404);
+  });
+
+  it("POST /api/killswitch, /api/agent/:id/budget and /mute persist to control.json", async () => {
+    await freshServer();
+
+    // Turning the kill-switch ON requires { confirm: true } (mirrors DELETE).
+    const noConfirm = await fetch(`${handle.url}/api/killswitch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ on: true }),
+    });
+    expect(noConfirm.status).toBe(400);
+    expect(await noConfirm.json()).toMatchObject({ error: "confirm required" });
+    expect(new ControlSettings({ path: controlPath }).isKilled()).toBe(false); // not flipped
+
+    expect(await (await fetch(`${handle.url}/api/killswitch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ on: true, confirm: true }),
+    })).json()).toMatchObject({ ok: true, killSwitch: true });
+    expect(new ControlSettings({ path: controlPath }).isKilled()).toBe(true);
+
+    // Turning it OFF is a recovery action — no confirmation required.
+    expect(await (await fetch(`${handle.url}/api/killswitch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ on: false }),
+    })).json()).toMatchObject({ ok: true, killSwitch: false });
+    expect(new ControlSettings({ path: controlPath }).isKilled()).toBe(false);
+
+    expect(await (await fetch(`${handle.url}/api/agent/dev/budget`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ budget: 500 }),
+    })).json()).toMatchObject({ ok: true, budget: 500 });
+    expect(new ControlSettings({ path: controlPath }).getAgentBudget("dev")).toBe(500);
+
+    expect(await (await fetch(`${handle.url}/api/agent/dev/mute`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ disabled: true }),
+    })).json()).toMatchObject({ ok: true, disabled: true });
+    expect(new ControlSettings({ path: controlPath }).isAgentDisabled("dev")).toBe(true);
+  });
+
+  it("rejects an invalid budget and a GET to an unknown path", async () => {
+    await freshServer();
+    const bad = await fetch(`${handle.url}/api/agent/dev/budget`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ budget: -5 }),
+    });
+    expect(bad.status).toBe(400);
+    expect((await fetch(`${handle.url}/api/nope`)).status).toBe(404);
   });
 });
