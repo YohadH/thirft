@@ -143,7 +143,7 @@ function handleWrite(
     readBody(req, res, (body) => {
       const on = body?.on === true;
       if (on && body?.confirm !== true) {
-        sendJson(res, 400, { error: "confirm required" });
+        sendJson(res, 400, { error: "confirm_required" });
         return;
       }
       panel.setKillSwitch(on);

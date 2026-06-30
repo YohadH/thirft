@@ -526,7 +526,9 @@ describe("dashboard write endpoints", () => {
       body: JSON.stringify({ on: true }),
     });
     expect(noConfirm.status).toBe(400);
-    expect(await noConfirm.json()).toMatchObject({ error: "confirm required" });
+    // Standardized: both confirm guards (kill-switch + memory-delete) return the
+    // same underscore key so clients can pattern-match one error.
+    expect(await noConfirm.json()).toMatchObject({ error: "confirm_required" });
     expect(new ControlSettings({ path: controlPath }).isKilled()).toBe(false); // not flipped
 
     expect(await (await fetch(`${handle.url}/api/killswitch`, {
