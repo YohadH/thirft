@@ -172,6 +172,55 @@ describe("RateLimitHandler — concurrency throttle", () => {
     expect(handler.activeCount("p")).toBe(0);
   });
 
+  it("frees the slot during backoff so a 429 storm does not pin the lane", async () => {
+    // Regression: previously execute() held the slot for the FULL retry duration
+    // (acquire → withRetry-incl-sleeps → release). Under a 429 storm every slot
+    // stayed pinned through the backoffs, deadlocking the fleet. The slot must
+    // gate concurrency (the fetch), not time (the sleep).
+    const sleepResolvers: Array<() => void> = [];
+    const sleep = (_ms: number) =>
+      new Promise<void>((resolve) => {
+        sleepResolvers.push(resolve);
+      });
+    const handler = new RateLimitHandler({ maxConcurrency: 1, sleep, maxRetries: 2 });
+
+    // First call always 429s, so it enters the backoff sleep and parks there.
+    const slow = handler.execute("p", async () => r429({ "retry-after": "1" }), "u");
+
+    // Let the first fetch complete, the body drain, and the handler reach
+    // `await sleep(...)`. safeDrain (res.clone().arrayBuffer()) resolves on a
+    // macrotask, so yield to the timer queue, not just the microtask queue.
+    const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+    for (let i = 0; i < 20 && sleepResolvers.length === 0; i += 1) {
+      await tick();
+    }
+
+    // While the first request is sleeping through its backoff, the lane must be
+    // FREE (slot released) — not pinned at 1.
+    expect(sleepResolvers).toHaveLength(1); // first request is parked in backoff
+    expect(handler.activeCount("p")).toBe(0);
+
+    // A second request can therefore acquire the slot and run immediately,
+    // even though the first request is still mid-retry.
+    const fast = await handler.execute("p", async () => ok("second"), "u");
+    expect(fast.status).toBe(200);
+    expect(await fast.text()).toBe("second");
+
+    // Unblock the first request's remaining backoffs so it can finish. Each
+    // resolved sleep lets it run another fetch+drain (a macrotask), which may
+    // enqueue the next sleep — keep ticking and draining until it settles.
+    let done = false;
+    void slow.then(() => {
+      done = true;
+    });
+    for (let guard = 0; guard < 50 && !done; guard += 1) {
+      if (sleepResolvers.length) sleepResolvers.shift()!();
+      await tick();
+    }
+    await slow;
+    expect(handler.activeCount("p")).toBe(0);
+  });
+
   it("tracks concurrency lanes per provider independently", async () => {
     const handler = new RateLimitHandler({ maxConcurrency: 1 });
     const block: Array<() => void> = [];

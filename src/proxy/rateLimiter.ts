@@ -108,19 +108,27 @@ export class RateLimitHandler {
    * exhausted (so the caller always gets a definitive answer).
    */
   async execute(provider: string, fetchImpl: FetchLike, url: string, init?: RequestInit): Promise<Response> {
-    await this.acquire(provider);
-    try {
-      return await this.withRetry(fetchImpl, url, init);
-    } finally {
-      this.release(provider);
-    }
+    return this.withRetry(provider, fetchImpl, url, init);
   }
 
-  private async withRetry(fetchImpl: FetchLike, url: string, init?: RequestInit): Promise<Response> {
+  private async withRetry(provider: string, fetchImpl: FetchLike, url: string, init?: RequestInit): Promise<Response> {
     let attempt = 0;
     // The loop runs at most maxRetries+1 times: 1 initial try + maxRetries retries.
     for (;;) {
-      const res = await fetchImpl(url, init);
+      // The concurrency slot gates *compute* (the in-flight upstream call), not
+      // *time*. Acquire it only around the fetch, then release it BEFORE we sleep
+      // through the backoff. If the slot were held across the backoff (up to
+      // maxBackoffMs per attempt × maxRetries), a 429 storm would pin every slot
+      // for the full retry duration and deadlock the rest of the fleet behind a
+      // queue that cannot drain. Re-acquiring per attempt keeps slots free during
+      // every sleep so other requests can make progress.
+      await this.acquire(provider);
+      let res: Response;
+      try {
+        res = await fetchImpl(url, init);
+      } finally {
+        this.release(provider);
+      }
       if (!isRateLimited(res)) return res;
       if (attempt >= this.maxRetries) return res; // give up — return the last 429
 
@@ -128,6 +136,7 @@ export class RateLimitHandler {
       // Drain the body so the upstream connection can be reused (some fetch impls
       // hold the socket until the body is consumed). Best-effort; never throws.
       await safeDrain(res);
+      // Slot already released above — we sleep WITHOUT holding concurrency.
       await this.sleep(waitMs);
       attempt += 1;
     }
