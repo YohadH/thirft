@@ -155,7 +155,8 @@ function handleWrite(
   // POST /api/memory/:id/pin  -> toggles pinned
   let m = matchPath(path, /^\/api\/memory\/([^/]+)\/pin$/);
   if (method === "POST" && m) {
-    const id = decodeURIComponent(m);
+    const id = safeDecode(m);
+    if (id === null) return badPathSegment(res);
     const current = panel.getMemory(id);
     if (!current) return notFound(res);
     const row = current.pinned ? panel.unpin(id, Date.now()) : panel.pin(id, Date.now());
@@ -166,7 +167,8 @@ function handleWrite(
   // POST /api/memory/:id/disable  -> toggles disabled
   m = matchPath(path, /^\/api\/memory\/([^/]+)\/disable$/);
   if (method === "POST" && m) {
-    const id = decodeURIComponent(m);
+    const id = safeDecode(m);
+    if (id === null) return badPathSegment(res);
     const current = panel.getMemory(id);
     if (!current) return notFound(res);
     const row = current.disabled ? panel.enable(id, Date.now()) : panel.disable(id, Date.now());
@@ -177,7 +179,8 @@ function handleWrite(
   // DELETE /api/memory/:id  -> prune (permanent). Guard: body { confirm: true }.
   m = matchPath(path, /^\/api\/memory\/([^/]+)$/);
   if (method === "DELETE" && m) {
-    const id = decodeURIComponent(m);
+    const id = safeDecode(m);
+    if (id === null) return badPathSegment(res);
     readBody(req, res, (body) => {
       if (body?.confirm !== true) {
         sendJson(res, 400, { error: "confirm_required" });
@@ -193,7 +196,8 @@ function handleWrite(
   // POST /api/agent/:id/budget  { budget: number | null }
   m = matchPath(path, /^\/api\/agent\/([^/]+)\/budget$/);
   if (method === "POST" && m) {
-    const agentId = decodeURIComponent(m);
+    const agentId = safeDecode(m);
+    if (agentId === null) return badPathSegment(res);
     readBody(req, res, (body) => {
       const raw = body?.budget;
       if (raw === null || raw === undefined) {
@@ -215,7 +219,8 @@ function handleWrite(
   // POST /api/agent/:id/mute  { disabled: boolean }
   m = matchPath(path, /^\/api\/agent\/([^/]+)\/mute$/);
   if (method === "POST" && m) {
-    const agentId = decodeURIComponent(m);
+    const agentId = safeDecode(m);
+    if (agentId === null) return badPathSegment(res);
     readBody(req, res, (body) => {
       const disabled = body?.disabled === true;
       panel.setAgentDisabled(agentId, disabled);
@@ -232,8 +237,26 @@ function matchPath(path: string, re: RegExp): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Decode a URL path segment, returning `null` on a malformed escape sequence.
+ * `decodeURIComponent` throws a `URIError` on input like `%`, `%zz`, or a lone
+ * surrogate; left uncaught it would escape the per-endpoint handlers and surface
+ * as a misleading 500. Callers treat `null` as a 400 Bad Request.
+ */
+function safeDecode(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
 function notFound(res: ServerResponse): void {
   sendJson(res, 404, { error: "not_found" });
+}
+
+function badPathSegment(res: ServerResponse): void {
+  sendJson(res, 400, { error: "bad_request" });
 }
 
 /** Read & JSON-parse a small request body, capped to guard against abuse. */

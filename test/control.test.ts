@@ -569,4 +569,32 @@ describe("dashboard write endpoints", () => {
     expect(bad.status).toBe(400);
     expect((await fetch(`${handle.url}/api/nope`)).status).toBe(404);
   });
+
+  it("returns 400 (not 500) for a malformed percent-escape in the path segment", async () => {
+    await freshServer();
+    // A lone '%' / truncated escape makes decodeURIComponent throw URIError.
+    // The handler must catch it and answer 400, never let it surface as a 500.
+    // fetch() refuses to build such a URL, so hit the socket raw via node:http.
+    const { request } = await import("node:http");
+    const { port } = handle.server.address() as { port: number };
+
+    function rawGet(path: string): Promise<number> {
+      return new Promise((resolve, reject) => {
+        const req = request(
+          { host: "127.0.0.1", port, method: "POST", path },
+          (res) => {
+            res.resume(); // drain
+            resolve(res.statusCode ?? 0);
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+    }
+
+    // `/api/memory/%E0%A4%A/pin` — `%A` is a truncated escape → URIError on decode.
+    expect(await rawGet("/api/memory/%E0%A4%A/pin")).toBe(400);
+    // `/api/agent/%/mute` — lone percent → URIError on decode.
+    expect(await rawGet("/api/agent/%/mute")).toBe(400);
+  });
 });
