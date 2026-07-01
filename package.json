@@ -24,7 +24,8 @@
   "files": [
     "dist",
     "benchmark",
-    "docs",
+    "docs/case-study.md",
+    "docs/dashboard.svg",
     "scripts",
     "README.md",
     "LICENSE"

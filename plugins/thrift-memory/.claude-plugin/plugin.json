@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "thrift-memory",
+  "displayName": "Thrift Memory",
+  "version": "0.1.0",
+  "description": "Cost-first memory for AI agents. Recall only the relevant slice of memory under a hard token budget, and get a savings receipt for every recall. Bundles the thrift-memory MCP server (remember / recall / search_memory), a memory-aware agent, and slash commands.",
+  "author": {
+    "name": "Yohad Hakim",
+    "email": "yoadhakimv@gmail.com"
+  },
+  "homepage": "https://github.com/YohadH/thrift-memory#readme",
+  "repository": "https://github.com/YohadH/thrift-memory",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "mcp", "cost", "tokens", "agents", "recall", "context"]
+}

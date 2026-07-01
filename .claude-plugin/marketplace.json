@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "thrift",
+  "description": "Cost-first memory for AI agents — the Thrift Memory plugin (MCP server + memory-aware agent + slash commands).",
+  "owner": {
+    "name": "Yohad Hakim",
+    "email": "yoadhakimv@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "thrift-memory",
+      "source": "./plugins/thrift-memory",
+      "description": "Cost-first memory for AI agents: recall only the relevant slice under a hard token budget, with a savings receipt. Bundles the thrift-memory MCP server plus a memory-aware agent and slash commands."
+    }
+  ]
+}

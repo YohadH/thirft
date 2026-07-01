@@ -75,6 +75,22 @@ search_memory(agentId, task?, tags?, limit?)
 
 ## Quick Start
 
+### Option A — Claude Code plugin (one command)
+
+If you use Claude Code, install the whole thing — MCP server, a memory-aware
+agent, and `/thrift-recall` / `/thrift-remember` commands — in one step:
+
+```text
+/plugin marketplace add YohadH/thrift-memory
+/plugin install thrift-memory@thrift
+```
+
+That registers the `thrift` MCP server automatically (via `npx thrift-memory`),
+so `recall` / `remember` / `search_memory` are available with no config editing.
+See [`plugins/thrift-memory/`](./plugins/thrift-memory) for what the plugin bundles.
+
+### Option B — MCP config (any MCP client)
+
 ```bash
 npm install -g thrift-memory
 ```
