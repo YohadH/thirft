@@ -56,18 +56,36 @@ export class ScopedRetriever implements Retriever {
 
     const selected: MemoryRecord[] = [];
     let injectedTokens = 0;
+    // `relevantTokens` is every memory that CLEARS the relevance floor — the
+    // context worth injecting before the budget bites. Tracking it (vs what we
+    // actually injected) is what tells the agent whether the budget, not
+    // relevance, is what held memory back. Irrelevant memories never count here,
+    // so "more relevant memory exists" can't be triggered by noise.
+    let relevantTokens = 0;
+    let skippedForBudget = 0;
     for (const m of ranked) {
       if (applyFloor && score(m, queryTerms) === 0) continue; // not relevant, not pinned
-      if (injectedTokens + m.tokens > query.tokenBudget) continue; // hard budget
+      relevantTokens += m.tokens;
+      if (injectedTokens + m.tokens > query.tokenBudget) {
+        skippedForBudget += 1; // relevant, but the budget couldn't fit it
+        continue;
+      }
       selected.push(m);
       injectedTokens += m.tokens;
     }
+
+    const skippedTokensForBudget = relevantTokens - injectedTokens;
 
     return {
       memories: selected,
       injectedTokens,
       baselineTokens,
       savedTokens: baselineTokens - injectedTokens,
+      relevantTokens,
+      skippedForBudget,
+      skippedTokensForBudget,
+      hasMoreRelevantMemory: skippedForBudget > 0,
+      budgetPressure: pressure(injectedTokens, skippedTokensForBudget),
     };
   }
 
@@ -79,6 +97,18 @@ export class ScopedRetriever implements Retriever {
       : [];
     return [...org, ...agent, ...session];
   }
+}
+
+/**
+ * Classify budget pressure from what was injected vs what relevant memory the
+ * budget dropped. `none` = everything relevant fit; `high` = at least as much
+ * relevant memory was dropped as injected (including the "got nothing" case);
+ * `low` = some was dropped but less than what fit.
+ */
+function pressure(injectedTokens: number, skippedTokensForBudget: number): "none" | "low" | "high" {
+  if (skippedTokensForBudget <= 0) return "none";
+  if (skippedTokensForBudget >= injectedTokens) return "high";
+  return "low";
 }
 
 function score(m: MemoryRecord, queryTerms: Set<string>): number {

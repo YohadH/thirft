@@ -243,6 +243,42 @@ For a credible public report, publish both token reduction and quality evidence.
 For example: "saved 72% of memory tokens across 200 real recalls, with 19/20
 paired tasks producing the same outcome."
 
+### Safe token saver — budget-pressure signals
+
+Cutting tokens is only safe if the agent can tell "I got everything relevant"
+apart from "I got a fraction of it." So every `recall` result also reports how
+much *relevant* memory the budget forced it to leave behind:
+
+```json
+{
+  "injectedTokens": 492,
+  "baselineTokens": 14000,
+  "savedTokens": 13508,
+  "relevantTokens": 2100,
+  "skippedForBudget": 12,
+  "skippedTokensForBudget": 1608,
+  "hasMoreRelevantMemory": true,
+  "budgetPressure": "high"
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `relevantTokens` | Tokens of memory that cleared the relevance filter — what was worth injecting before the budget applied |
+| `skippedForBudget` | Count of *relevant* memories dropped only because they didn't fit the budget |
+| `skippedTokensForBudget` | `relevantTokens - injectedTokens` |
+| `hasMoreRelevantMemory` | `true` when relevant memory was left out for budget |
+| `budgetPressure` | `none` (everything relevant fit) · `low` · `high` (as much relevant memory skipped as injected) |
+
+These count **only** memory that passed the relevance filter, so `hasMoreRelevantMemory`
+never fires on noise the recall correctly dropped. The intended loop is
+**progressive recall**, done by the agent (not the end user): start with a small
+budget, and if `budgetPressure` is `high`, do one more focused recall before
+acting — never exceeding a total task budget. That is what turns Thrift from a
+token *saver* into a *safe* token saver: you never silently act on a starved slice.
+The bundled Claude Code plugin's `memory-keeper` agent and `/thrift-recall` command
+already follow this loop.
+
 > **Account for the MCP overhead.** Registering any MCP server adds its tool-schema
 > load to each agent's context (often several thousand tokens). The honest figure is
 > **net**: `savings = recall reduction − MCP schema/tool-call overhead`. On a

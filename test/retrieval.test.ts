@@ -147,6 +147,57 @@ describe("ScopedRetriever budget + receipt", () => {
     expect(texts.some((t) => t.includes("login oauth"))).toBe(true);
   });
 
+  it("budget pressure: signals when relevant memory was dropped for budget (not relevance)", () => {
+    const s = new JsonlStore();
+    // 4 relevant memories of exactly 10 tokens each ("login " + 34 chars = 40 chars / 4).
+    // Each contains the query term "login" so it clears the relevance floor.
+    for (let i = 0; i < 4; i++) {
+      s.add({ scope: "org", text: "login " + String.fromCharCode(97 + i).repeat(34) }, T0 + i);
+    }
+    const out = new ScopedRetriever().recall(s, {
+      agentId: "dev",
+      task: "login oauth token flow",
+      tokenBudget: 25, // fits 2 (20 tok); a 3rd would be 30 > 25
+    });
+    expect(out.memories.length).toBe(2); // only 2 fit
+    expect(out.relevantTokens).toBe(40); // all 4 cleared the relevance floor
+    expect(out.skippedForBudget).toBe(2); // 2 relevant memories didn't fit
+    expect(out.skippedTokensForBudget).toBe(out.relevantTokens - out.injectedTokens);
+    expect(out.hasMoreRelevantMemory).toBe(true);
+    expect(out.budgetPressure).toBe("high"); // as much relevant memory skipped as injected
+  });
+
+  it("budget pressure is 'none' when everything relevant fits", () => {
+    const s = new JsonlStore();
+    s.add({ scope: "org", text: "login oauth token flow note" }, T0);
+    const out = new ScopedRetriever().recall(s, {
+      agentId: "dev",
+      task: "login oauth token flow",
+      tokenBudget: 10_000, // ample
+    });
+    expect(out.hasMoreRelevantMemory).toBe(false);
+    expect(out.skippedForBudget).toBe(0);
+    expect(out.skippedTokensForBudget).toBe(0);
+    expect(out.budgetPressure).toBe("none");
+    expect(out.relevantTokens).toBe(out.injectedTokens);
+  });
+
+  it("budget pressure does NOT fire for memory dropped by the relevance floor (only budget counts)", () => {
+    const s = new JsonlStore();
+    s.add({ scope: "org", text: "login oauth token flow" }, T0); // relevant, fits
+    s.add({ scope: "org", text: "kubernetes helm chart deployment manifests" }, T0 + 1); // irrelevant
+    const out = new ScopedRetriever().recall(s, {
+      agentId: "dev",
+      task: "login oauth token flow",
+      tokenBudget: 10_000,
+    });
+    // The irrelevant memory was dropped by the floor, not the budget — so it must
+    // NOT show up as budget pressure ("more relevant memory exists" would be a lie).
+    expect(out.hasMoreRelevantMemory).toBe(false);
+    expect(out.budgetPressure).toBe("none");
+    expect(out.skippedForBudget).toBe(0);
+  });
+
   it("excludes disabled memories entirely", () => {
     const s = new JsonlStore();
     const m = s.add({ scope: "org", text: "disabled secret note" }, T0);

@@ -76,7 +76,17 @@ export interface RecallQuery {
   outcome?: string;
 }
 
-/** The result of a recall: the chosen slice plus the metering receipt. */
+/**
+ * How much *relevant* memory the budget forced Thrift to leave behind. Cutting
+ * tokens is only safe if the agent can tell "got everything relevant" apart from
+ * "got a fraction of it" — otherwise a cost saving silently becomes a quality
+ * loss. These signals make that visible so an agent (not the end user) can decide
+ * to do one more focused recall. Deterministic and honest: every field is derived
+ * from what the retriever already computed, never a fabricated suggestion.
+ */
+export type BudgetPressure = "none" | "low" | "high";
+
+/** The result of a recall: the chosen slice plus the metering + pressure receipt. */
 export interface RecallResult {
   /** Memories selected for injection, ordered by relevance then recency. */
   memories: MemoryRecord[];
@@ -86,4 +96,23 @@ export interface RecallResult {
   baselineTokens: number;
   /** baselineTokens - injectedTokens. The provable savings for this recall. */
   savedTokens: number;
+  /**
+   * Total tokens of all memories that passed the relevance filter — i.e. the
+   * context Thrift judged worth injecting before the budget was applied. When
+   * this exceeds `injectedTokens`, the budget (not relevance) was the constraint.
+   */
+  relevantTokens: number;
+  /** Count of *relevant* memories dropped solely because they didn't fit the budget. */
+  skippedForBudget: number;
+  /** Token cost of those budget-dropped relevant memories (`relevantTokens - injectedTokens`). */
+  skippedTokensForBudget: number;
+  /** True when at least one relevant memory was dropped for budget — a signal to consider recalling more. */
+  hasMoreRelevantMemory: boolean;
+  /**
+   * How tight the budget was against the relevant set:
+   *   none — everything relevant fit (nothing skipped for budget)
+   *   low  — a little relevant memory was skipped (< half of what fit)
+   *   high — as much or more relevant memory was skipped as was injected
+   */
+  budgetPressure: BudgetPressure;
 }

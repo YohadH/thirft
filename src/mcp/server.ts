@@ -103,7 +103,11 @@ const TOOLS = [
     description:
       "Retrieve the relevant memory slice for an agent-run under a hard token budget. " +
       "Returns selected memories + a metering receipt (injectedTokens, baselineTokens, savedTokens) " +
-      "that proves the savings vs loading everything.",
+      "that proves the savings vs loading everything. The receipt also reports budget pressure: " +
+      "hasMoreRelevantMemory / skippedForBudget / budgetPressure ('none'|'low'|'high') tell you whether " +
+      "relevant memory was left out because the budget was too small. If budgetPressure is 'high' or " +
+      "hasMoreRelevantMemory is true, do ONE more focused recall (a narrower task or larger budget) before " +
+      "acting — start cheap, expand only when the signal says the slice was insufficient.",
     inputSchema: {
       type: "object",
       properties: {
@@ -205,7 +209,7 @@ export class ThriftMcpServer {
     this.meterLogPath = opts.meterLogPath;
     this.resolveBudget = opts.resolveBudget;
     this._server = new Server(
-      { name: "thrift-memory", version: "0.0.5" },
+      { name: "thrift-memory", version: "0.0.6" },
       { capabilities: { tools: {} } },
     );
     this._registerHandlers();
