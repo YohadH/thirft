@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.YohadH/thrift-memory",
+  "description": "Cost-first memory for AI agents: recall only the relevant slice under a token budget, with receipts.",
+  "repository": {
+    "url": "https://github.com/YohadH/thrift-memory",
+    "source": "github"
+  },
+  "version": "0.0.5",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "thrift-memory",
+      "version": "0.0.5",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
