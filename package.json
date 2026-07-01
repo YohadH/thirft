@@ -2,7 +2,7 @@
   "name": "thrift-memory",
   "version": "0.0.5",
   "mcpName": "io.github.YohadH/thrift-memory",
-  "description": "Cost-first memory layer for AI agent fleets - loads only the context each agent needs, meters every token, and proves the savings.",
+  "description": "Cost-first MCP memory server for coding agents that stop reloading large MEMORY.md, AGENTS.md, and project context files every session. Recalls only task-relevant memory under a hard token budget and returns a savings receipt: baselineTokens vs injectedTokens vs savedTokens.",
   "license": "Apache-2.0",
   "author": "Yohad Hakim <yoadhakimv@gmail.com>",
   "repository": {
@@ -55,6 +55,20 @@
     "import:memories:reset": "node scripts/import-memories.mjs --clear"
   },
   "keywords": [
+    "mcp",
+    "mcp-server",
+    "memory-mcp",
+    "coding-agents",
+    "claude-code",
+    "codex",
+    "cursor",
+    "agents-md",
+    "memory-md",
+    "token-budget",
+    "token-savings",
+    "context-engineering",
+    "agent-memory",
+    "cost-first-memory",
     "ai",
     "agents",
     "memory",
@@ -62,8 +76,7 @@
     "token",
     "cost",
     "context",
-    "fleet",
-    "mcp"
+    "fleet"
   ],
   "devDependencies": {
     "@types/node": "^20.14.0",

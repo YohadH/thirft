@@ -1,20 +1,27 @@
 # Thrift Memory
 
-**Cost-first memory for AI agent teams.** (npm: [`thrift-memory`](https://www.npmjs.com/package/thrift-memory))
+**The MCP memory server that proves how many tokens you saved.** (npm: [`thrift-memory`](https://www.npmjs.com/package/thrift-memory))
 
 > Not affiliated with [Apache Thrift](https://thrift.apache.org/), the RPC framework.
-> This is an MCP memory layer for AI agents.
+> This project is always referred to as **Thrift Memory** — an MCP memory layer for coding agents.
 
-Thrift Memory gives MCP-capable agents a small shared memory layer that optimizes
-for cost visibility: store memories cheaply, recall only the relevant slice under a
-hard token budget, and log a receipt for every recall.
+Thrift Memory is a **cost-first MCP memory server for coding agents that stop reloading large
+`MEMORY.md`, `AGENTS.md`, and project context files every session.** It recalls only
+task-relevant memory under a **hard token budget** and returns a savings receipt:
+**baselineTokens vs injectedTokens vs savedTokens.**
 
 ```text
 savedTokens = baselineTokens - injectedTokens
 ```
 
-The goal is practical: help teams of agents stop paying to reload the same broad
-context on every run.
+If your coding agent re-loads the same large context file at every session start, that
+reload is pure, repeated token cost. Thrift Memory caps it and — uniquely — logs a
+receipt on every recall so you can see the token usage you avoided, not just trust that
+you avoided it.
+
+> Budgeted recall, in one line: *Thrift Memory recalls only task-relevant memory under a
+> hard token budget and logs a receipt showing baselineTokens vs injectedTokens vs
+> savedTokens.*
 
 > Status: early `0.0.x`. APIs are useful but still allowed to change before
 > `v0.1`.
@@ -36,28 +43,39 @@ Be precise about the split:
 
 ## How It Compares
 
-Mature memory layers — [Mem0](https://github.com/mem0ai/mem0), [Zep](https://www.getzep.com/),
-[Letta](https://www.letta.com/), [Cognee](https://www.cognee.ai/) — optimize **recall
-quality**: LLM-enriched writes, temporal or entity knowledge graphs, deep
-personalization. They are excellent at that, and far more battle-tested than this
-project. Thrift Memory does not try to beat them on recall depth.
+The right comparison for Thrift Memory is **not** recall-quality / knowledge-graph
+layers like [Mem0](https://github.com/mem0ai/mem0), [Zep](https://www.getzep.com/), or
+[Graphiti](https://github.com/getzep/graphiti) — those optimize how *smart* recall is.
+Thrift Memory competes with the growing set of **MCP memory servers for coding agents**,
+and it differs from all of them on one axis: **cost visibility.**
 
-Thrift optimizes a different axis: **cost, locally, with proof.** The tradeoffs:
+Every recall returns a savings receipt — `baselineTokens`, `injectedTokens`,
+`savedTokens` — so you can see how many tokens you avoided. No other server in this
+category positions itself around *proving* the saving.
 
-| | Thrift Memory | Quality-first layers (Mem0 / Zep / Letta / Cognee) |
-| --- | --- | --- |
-| Primary goal | Cut & **prove** token cost (budget + savings receipt) | Maximize recall quality / reasoning |
-| Write path | Cheap — no mandatory LLM enrichment | Often LLM extraction/embedding on write |
-| Install | `npx thrift-memory` — one dependency, local JSONL, **no API key, no DB, no Docker** | Typically an LLM key + a vector/graph DB (e.g. Mem0 self-host: API + Postgres/pgvector + Neo4j) |
-| Dashboard | **Token-savings meter** + owner controls, local & read/write | Memory/agent-management UIs (several have one; different purpose) |
-| Recall depth | Scoped match under a hard token budget | Knowledge-graph / temporal / semantic ranking |
-| Maturity | Early `0.0.x` | Production-grade, widely adopted |
+| Server | What it optimizes | Hard token budget on recall? | Emits a savings receipt (baseline vs injected vs saved)? |
+| --- | --- | --- | --- |
+| **Thrift Memory** | **Cost-first recall — cap the tokens and prove the saving** | **Yes** | **Yes — every recall** |
+| Official Memory MCP | Knowledge-graph memory (entities / relations) | No | No |
+| Context Mode | Context sandboxing — keep large tool/file outputs out of context (SQLite FTS5) | No (sandbox, not a recall budget) | No |
+| Agent Memory MCP | Returns a small index via `memory_read`, then `memory_search` by topic | No | No |
+| [@provos/memory-mcp-server](https://www.npmjs.com/package/@provos/memory-mcp-server) | `memory_context` / `task` recall inside a token budget | Yes | No |
+| memento-memory-mcp | Memory for coding agents — imports `CLAUDE.md`, SQLite, git sync, local UI | No | No |
+| MCP Context Server | Thread-scoped storage, full-text / semantic / hybrid search, reranking | No | No |
+| smart-claude-memory-mcp | Claude-oriented memory store | No | No |
 
-Honest summary: if you need the smartest possible recall, use one of the others.
-If you run a **fleet of agents** that keep re-paying to reload broad context and you
-want to **measure and cap that cost** with no extra infrastructure, that gap is what
-Thrift fills. The two are not mutually exclusive — Thrift can sit in front of a
-heavier store as the budget/metering layer.
+The closest competitor, `@provos/memory-mcp-server`, also recalls under a token budget —
+but it does not surface *what the budget saved you*. Thrift Memory's differentiator is
+not "I do memory"; it is "I do memory with a **cost accounting**." The
+`savedTokens = baselineTokens - injectedTokens` receipt is the thing no one else in this
+category leads with.
+
+Honest summary: if you need the smartest possible recall, use a knowledge-graph layer
+like Mem0 or Zep. If your coding agents keep re-paying to reload large `MEMORY.md` /
+`AGENTS.md` / project context files at every session start and you want to **measure
+and cap that cost** with no extra infrastructure, that gap is what Thrift Memory fills.
+The two are not mutually exclusive — Thrift Memory can sit in front of a heavier store
+as the budget/metering layer.
 
 ## MCP Tools
 
