@@ -77,6 +77,11 @@ and cap that cost** with no extra infrastructure, that gap is what Thrift Memory
 The two are not mutually exclusive — Thrift Memory can sit in front of a heavier store
 as the budget/metering layer.
 
+For the full head-to-head — including how Thrift Memory differs from **Mem0**, **Zep**,
+and **Graphiti** on the cost-vs-recall-quality axis — see
+[docs/COMPARISON.md](./docs/COMPARISON.md). Common questions are answered in
+[docs/FAQ.md](./docs/FAQ.md).
+
 ## MCP Tools
 
 ```text
