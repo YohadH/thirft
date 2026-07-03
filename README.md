@@ -80,7 +80,9 @@ as the budget/metering layer.
 For the full head-to-head — including how Thrift Memory differs from **Mem0**, **Zep**,
 and **Graphiti** on the cost-vs-recall-quality axis — see
 [docs/COMPARISON.md](./docs/COMPARISON.md). Common questions are answered in
-[docs/FAQ.md](./docs/FAQ.md).
+[docs/FAQ.md](./docs/FAQ.md). For a narrative walkthrough of the whole memory field —
+recall-quality layers vs. the cost-first MCP memory servers — read
+[the Mem0 vs Zep vs Graphiti blog post](./docs/blog-mem0-vs-zep-vs-graphiti.md).
 
 ## MCP Tools
 
