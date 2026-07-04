@@ -9,7 +9,7 @@
  * behind these exported contracts.
  */
 
-export const VERSION = "0.0.6";
+export const VERSION = "0.0.7";
 
 export type {
   Scope,
@@ -20,6 +20,9 @@ export type {
 } from "./types.js";
 
 export { estimateTokens, estimateTokensAll } from "./tokens.js";
+
+export type { AuditFile, AuditOptions, AuditResult } from "./audit.js";
+export { auditMemoryFiles, renderAudit } from "./audit.js";
 
 export type { MemoryStore } from "./store/index.js";
 export { JsonlStore } from "./store/jsonlStore.js";

@@ -6,12 +6,12 @@
     "url": "https://github.com/YohadH/thrift-memory",
     "source": "github"
   },
-  "version": "0.0.6",
+  "version": "0.0.7",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "thrift-memory",
-      "version": "0.0.6",
+      "version": "0.0.7",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y thrift-memory session-context --budget=1500"
+          }
+        ]
+      }
+    ]
+  }
+}

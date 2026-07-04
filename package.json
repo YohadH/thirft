@@ -1,6 +1,6 @@
 {
   "name": "thrift-memory",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "mcpName": "io.github.YohadH/thrift-memory",
   "description": "Cost-first MCP memory server for coding agents that stop reloading large MEMORY.md, AGENTS.md, and project context files every session. Recalls only task-relevant memory under a hard token budget and returns a savings receipt: baselineTokens vs injectedTokens vs savedTokens.",
   "license": "Apache-2.0",

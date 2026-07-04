@@ -98,9 +98,43 @@ search_memory(agentId, task?, tags?, limit?)
   Browse matching memories without applying a small recall budget.
 ```
 
+## See Your Own Waste (10 seconds, nothing installed)
+
+Before adopting anything, measure what your agents already reload every session:
+
+```bash
+npx -y thrift-memory audit
+```
+
+It scans the current repo for agent memory / instruction files — `CLAUDE.md`,
+`CLAUDE.local.md`, `MEMORY.md`, `AGENTS.md`, `GEMINI.md`, `.cursorrules`,
+`.cursor/rules/`, `.windsurfrules`, `.clinerules`,
+`.github/copilot-instructions.md`, plus your user-global `~/.claude/CLAUDE.md` —
+and prints the bill:
+
+```text
+Thrift Memory audit — D:\myrepo
+
+  File                               Tokens
+  CLAUDE.md                           3,000
+  .cursor/rules/api.mdc                 900
+  AGENTS.md                             800
+  .github/copilot-instructions.md       300
+  TOTAL reloaded per session          5,000
+
+At 10 sessions/day (--sessions): ~50,000 tokens/day, ~1,500,000/month
+≈ $22.50/month at $15/M input tokens (an assumption — adjust: --price-per-mtok)
+
+With recall capped at 2,000 tokens/session (--budget): projected saving ~60%
+```
+
+Every number is computed from your files with the same estimator the meter uses —
+nothing is phoned home, nothing is installed. Flags: `--path=`, `--sessions=`,
+`--budget=`, `--price-per-mtok=`.
+
 ## Quick Start
 
-### Option A — Claude Code plugin (one command)
+### Option A — Claude Code plugin (one command, automatic memory)
 
 If you use Claude Code, install the whole thing — MCP server, a memory-aware
 agent, and `/thrift-recall` / `/thrift-remember` commands — in one step:
@@ -113,6 +147,14 @@ agent, and `/thrift-recall` / `/thrift-remember` commands — in one step:
 That registers the `thrift` MCP server automatically (via `npx thrift-memory`),
 so `recall` / `remember` / `search_memory` are available with no config editing.
 See [`plugins/thrift-memory/`](./plugins/thrift-memory) for what the plugin bundles.
+
+**Automatic memory (v0.2.0):** the plugin ships a `SessionStart` hook that runs
+`thrift-memory session-context` and injects a budgeted memory slice (default
+1,500 tokens) directly into context at every session **start**, **resume**,
+**`/clear`**, and **post-compaction**. Your durable memories survive context
+loss with zero tool calls — and each auto-injection is metered (agent
+`session-start`), so the dashboard shows what the automatic path costs and
+saves too. An empty store injects nothing.
 
 ### Option B — MCP config (any MCP client)
 
