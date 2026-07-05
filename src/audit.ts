@@ -68,8 +68,17 @@ const SKIP_DIRS = new Set([
   "coverage",
 ]);
 
-/** Exact basenames (lower-cased) that agents auto-load as memory/instructions. */
-const MEMORY_BASENAMES = new Set([
+/**
+ * Root-context basenames (lower-cased): the memory/instruction files an agent
+ * reloads at EVERY session start — but only the copy at the repository root.
+ *
+ * A nested copy (e.g. `packages/api/AGENTS.md`, `third_party/foo/CLAUDE.md`) is
+ * NOT a per-session reload: agents load subtree memory on demand only when they
+ * work in that subtree, and a vendored copy under a dependency is never the
+ * agent's own context at all. Counting nested/vendored copies as per-session
+ * reloads inflates the waste projection — so these are matched at the root only.
+ */
+const ROOT_CONTEXT_BASENAMES = new Set([
   "claude.md",
   "claude.local.md",
   "memory.md",
@@ -80,11 +89,21 @@ const MEMORY_BASENAMES = new Set([
   ".clinerules",
 ]);
 
-/** Is this relative path an agent memory/instruction file? */
+/**
+ * Is this relative path an agent memory/instruction file reloaded per session?
+ *
+ * Root-context files count only at the root. Rules-directory / config files
+ * (`.cursor/rules/`, `.windsurf/rules/`, `.github/copilot-instructions.md`)
+ * live at fixed canonical locations and are matched wherever those exact paths
+ * occur relative to the root.
+ */
 function isMemoryFile(relPath: string): boolean {
   const norm = relPath.replace(/\\/g, "/").toLowerCase();
   const base = basename(norm);
-  if (MEMORY_BASENAMES.has(base)) return true;
+  // Root-context files are a per-session reload ONLY at the repo root. A nested
+  // or vendored copy (basename === full path is false → it sits in a subdir) is
+  // on-demand/foreign context, not a per-session reload — do not count it.
+  if (ROOT_CONTEXT_BASENAMES.has(base)) return norm === base;
   if (norm === ".github/copilot-instructions.md") return true;
   // Rules directories: every .md/.mdc under them is auto-loaded.
   if (/(^|\/)\.cursor\/rules\/.+\.(md|mdc)$/.test(norm)) return true;

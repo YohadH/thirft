@@ -51,6 +51,34 @@ describe("auditMemoryFiles", () => {
     expect(r.totalTokens).toBe(0);
   });
 
+  // BUG-THRFT-004: only the ROOT-context memory file is a per-session reload.
+  // Nested copies (loaded on demand) and vendored copies (foreign context under
+  // a dependency tree) must NOT inflate the per-session reload count/savings.
+  it("does not count nested or vendored root-context files as per-session reloads", () => {
+    // The genuine per-session reload: the repo-root AGENTS.md.
+    writeFileSync(join(dir, "AGENTS.md"), BLOCK("a", 400)); // 100 tok — counts
+
+    // Nested (subtree) copy — loaded on demand only when working in packages/api,
+    // NOT reloaded every session. Must NOT count.
+    mkdirSync(join(dir, "packages", "api"), { recursive: true });
+    writeFileSync(join(dir, "packages", "api", "AGENTS.md"), BLOCK("b", 4000));
+
+    // Vendored copy under a third-party dependency tree that is NOT in SKIP_DIRS
+    // (proves the fix ignores nested vendored context, not just node_modules).
+    mkdirSync(join(dir, "third_party", "somelib"), { recursive: true });
+    writeFileSync(join(dir, "third_party", "somelib", "CLAUDE.md"), BLOCK("c", 4000));
+
+    const r = auditMemoryFiles(dir);
+    const paths = r.files.map((f) => f.path);
+    expect(paths).toContain("AGENTS.md");
+    expect(paths).not.toContain("packages/api/AGENTS.md");
+    expect(paths).not.toContain("third_party/somelib/CLAUDE.md");
+    expect(r.files).toHaveLength(1);
+    // Savings signal reflects only the real root reload — not the inflated ~2,100.
+    expect(r.totalTokens).toBe(100);
+    expect(r.totalPerSession).toBe(100);
+  });
+
   it("projects per-day/month usage and the saving vs the recall budget", () => {
     writeFileSync(join(dir, "CLAUDE.md"), BLOCK("a", 40_000)); // 10,000 tok
     const r = auditMemoryFiles(dir, { sessionsPerDay: 10, tokenBudget: 2_000, pricePerMTok: 15 });
