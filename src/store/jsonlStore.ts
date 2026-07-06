@@ -45,6 +45,17 @@ export class JsonlStore implements MemoryStore {
     if (this.path) this.load();
   }
 
+  /**
+   * Re-read the persisted log from disk. This lets a long-running MCP server see
+   * updates made by another process, such as `thrift-panel` pin/disable/prune.
+   */
+  reload(): void {
+    if (!this.path) return;
+    this.records.clear();
+    this.skippedLines.length = 0;
+    this.load();
+  }
+
   add(input: MemoryInput, now: number): MemoryRecord {
     validateScope(input.scope, input);
     const record: MemoryRecord = {

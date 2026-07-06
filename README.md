@@ -184,6 +184,26 @@ npx thrift-memory \
   --default-budget=2000
 ```
 
+### File-Backed Recall + JSONL Overlay
+
+By default, the MCP server also scans the current working directory for existing
+agent context files: `MEMORY.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
+`.cursorrules`, `.windsurfrules`, `.clinerules`, `.cursor/rules/*.md|*.mdc`,
+`.windsurf/rules/*.md|*.mdc`, and `.github/copilot-instructions.md`.
+
+Those files are treated as **read-only recall sources**. `remember()` still writes
+new durable memories to the JSONL store at `--store-path`, so the runtime model is:
+
+```text
+MEMORY.md / AGENTS.md / rules files  +  ~/.thrift/memories.jsonl
+             read-only source        +       writable overlay
+```
+
+File edits are picked up on the next recall/search. To scan a different project
+root, pass `--file-root=/path/to/repo` or set `THRIFT_FILE_ROOT`. To disable
+file-backed recall and use only JSONL memories, pass `--file-memory=false` or set
+`THRIFT_FILE_MEMORY=0`.
+
 ## 60-Second Demo
 
 No agent required — prove the `remember → recall → receipt` loop with the library.

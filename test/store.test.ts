@@ -1,8 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { JsonlStore } from "../src/store/jsonlStore.js";
+import { FileMemoryStore } from "../src/store/fileMemoryStore.js";
+import { CompositeMemoryStore } from "../src/store/compositeMemoryStore.js";
+import { ScopedRetriever } from "../src/retrieval/scopedRetriever.js";
 
 const T0 = 1_000_000_000_000; // fixed epoch so tests never read the wall clock
 
@@ -244,5 +247,104 @@ describe("JsonlStore.compact() (no persistence path)", () => {
     expect(s.list()).toHaveLength(1);
     expect(s.get(a.id)?.text).toBe("one");
     expect(s.get(gone.id)).toBeUndefined();
+  });
+});
+
+describe("FileMemoryStore + CompositeMemoryStore", () => {
+  let dir: string;
+  let memPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "thrift-file-store-"));
+    memPath = join(dir, "memories.jsonl");
+  });
+
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("reads root memory files as org-scoped recallable records", () => {
+    writeFileSync(
+      join(dir, "MEMORY.md"),
+      "# Payments\n\nAll money values are stored as integer cents.",
+    );
+
+    const store = new FileMemoryStore({ rootDir: dir });
+    const out = new ScopedRetriever().recall(store, {
+      agentId: "dev",
+      task: "how should payments store integer cents",
+      tokenBudget: 1_000,
+    });
+
+    expect(out.memories).toHaveLength(1);
+    expect(out.memories[0].id).toMatch(/^file:/);
+    expect(out.memories[0].scope).toBe("org");
+    expect(out.memories[0].tags).toContain("source:file");
+    expect(out.memories[0].text).toContain("integer cents");
+  });
+
+  it("picks up edits to source files on the next read", () => {
+    const path = join(dir, "AGENTS.md");
+    writeFileSync(path, "The deploy flow uses canary releases.");
+    const store = new FileMemoryStore({ rootDir: dir });
+
+    expect(store.list()[0].text).toContain("canary");
+
+    writeFileSync(path, "The billing flow uses Stripe webhooks.");
+    const out = new ScopedRetriever().recall(store, {
+      agentId: "dev",
+      task: "billing stripe webhooks",
+      tokenBudget: 1_000,
+    });
+
+    expect(out.memories).toHaveLength(1);
+    expect(out.memories[0].text).toContain("Stripe webhooks");
+  });
+
+  it("includes rule-directory files and ignores nested root-context copies", () => {
+    mkdirSync(join(dir, ".cursor", "rules"), { recursive: true });
+    writeFileSync(join(dir, ".cursor", "rules", "api.mdc"), "API handlers validate auth tokens.");
+    mkdirSync(join(dir, "packages", "api"), { recursive: true });
+    writeFileSync(join(dir, "packages", "api", "AGENTS.md"), "Nested agent note should not auto-load.");
+
+    const texts = new FileMemoryStore({ rootDir: dir }).list().map((m) => m.text);
+
+    expect(texts.some((t) => t.includes("auth tokens"))).toBe(true);
+    expect(texts.some((t) => t.includes("Nested agent note"))).toBe(false);
+  });
+
+  it("merges file-backed records with the writable JSONL overlay", () => {
+    writeFileSync(join(dir, "MEMORY.md"), "Frontend uses server-rendered forms.");
+    const writable = new JsonlStore({ path: memPath });
+    const store = new CompositeMemoryStore({
+      writable,
+      sources: [new FileMemoryStore({ rootDir: dir })],
+    });
+
+    store.add({ scope: "org", text: "Backend stores money as integer cents." }, T0);
+    const out = new ScopedRetriever().recall(store, {
+      agentId: "dev",
+      tokenBudget: 1_000,
+    });
+    const texts = out.memories.map((m) => m.text);
+
+    expect(texts).toContain("Frontend uses server-rendered forms.");
+    expect(texts).toContain("Backend stores money as integer cents.");
+    expect(new JsonlStore({ path: memPath }).list()).toHaveLength(1);
+  });
+
+  it("reloads the writable JSONL overlay before recall so external dashboard edits apply", () => {
+    const writable = new JsonlStore({ path: memPath });
+    const store = new CompositeMemoryStore({ writable });
+    const memory = store.add({ scope: "org", text: "Disable this deployment memory." }, T0);
+
+    const external = new JsonlStore({ path: memPath });
+    external.update(memory.id, { disabled: true }, T0 + 1);
+
+    const out = new ScopedRetriever().recall(store, {
+      agentId: "dev",
+      tokenBudget: 1_000,
+    });
+
+    expect(out.memories).toHaveLength(0);
+    expect(out.baselineTokens).toBe(0);
   });
 });

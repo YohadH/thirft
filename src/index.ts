@@ -27,6 +27,10 @@ export { auditMemoryFiles, renderAudit } from "./audit.js";
 export type { MemoryStore } from "./store/index.js";
 export { JsonlStore } from "./store/jsonlStore.js";
 export type { JsonlStoreOptions } from "./store/jsonlStore.js";
+export { FileMemoryStore } from "./store/fileMemoryStore.js";
+export type { FileMemoryStoreOptions } from "./store/fileMemoryStore.js";
+export { CompositeMemoryStore } from "./store/compositeMemoryStore.js";
+export type { CompositeMemoryStoreOptions } from "./store/compositeMemoryStore.js";
 
 export type { Retriever } from "./retrieval/index.js";
 export { ScopedRetriever } from "./retrieval/scopedRetriever.js";

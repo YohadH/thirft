@@ -14,6 +14,8 @@
  *
  * Env vars (lower precedence than CLI flags):
  *   THRIFT_STORE_PATH      path to JSONL store file
+ *   THRIFT_FILE_ROOT       root scanned for MEMORY.md/AGENTS.md/etc. (default cwd)
+ *   THRIFT_FILE_MEMORY     set to 0/false to disable file-backed recall
  *   THRIFT_DEFAULT_BUDGET  default token budget for recall (integer)
  *   THRIFT_METER_PATH      path to JSONL metering log (injected/baseline/saved tokens per recall)
  *   THRIFT_CONTROL_PATH    path to the control-panel settings JSON (kill-switch / per-agent budgets+mutes)
@@ -30,6 +32,8 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { JsonlStore } from "../store/jsonlStore.js";
+import { CompositeMemoryStore } from "../store/compositeMemoryStore.js";
+import { FileMemoryStore } from "../store/fileMemoryStore.js";
 import { ScopedRetriever } from "../retrieval/scopedRetriever.js";
 import { InMemoryMeter } from "../meter/inMemoryMeter.js";
 import { ControlSettings } from "../control/settings.js";
@@ -56,6 +60,17 @@ const storePath =
   process.env["THRIFT_STORE_PATH"] ??
   join(homedir(), ".thrift", "memories.jsonl");
 
+const fileRoot = resolve(
+  flag("file-root") ??
+    process.env["THRIFT_FILE_ROOT"] ??
+    process.cwd(),
+);
+
+const fileMemoryRaw = flag("file-memory") ?? process.env["THRIFT_FILE_MEMORY"];
+const fileMemoryEnabled =
+  fileMemoryRaw === undefined ||
+  (fileMemoryRaw !== "0" && fileMemoryRaw.toLowerCase() !== "false");
+
 const rawBudget = flag("default-budget") ?? process.env["THRIFT_DEFAULT_BUDGET"];
 const defaultTokenBudget = rawBudget ? parseInt(rawBudget, 10) : 2_000;
 
@@ -73,6 +88,15 @@ const controlPath =
   flag("control-path") ??
   process.env["THRIFT_CONTROL_PATH"] ??
   join(homedir(), ".thrift", "control.json");
+
+function makeStore(): JsonlStore | CompositeMemoryStore {
+  const writable = new JsonlStore({ path: storePath });
+  if (!fileMemoryEnabled) return writable;
+  return new CompositeMemoryStore({
+    writable,
+    sources: [new FileMemoryStore({ rootDir: fileRoot })],
+  });
+}
 
 // ── subcommand dispatch (before the MCP server starts) ───────────────────────
 const positional = argv.filter((a) => !a.startsWith("--"));
@@ -95,7 +119,7 @@ if (positional[0] === "session-context") {
   // hook must not degrade the user's session).
   try {
     const { lines, result } = buildSessionContext(
-      new JsonlStore({ path: storePath }),
+      makeStore(),
       new ScopedRetriever(),
       {
         agentId: flag("agent-id") ?? "session-start",
@@ -127,7 +151,7 @@ if (positional[0] === "session-context") {
   process.exit(0);
 }
 
-const store = new JsonlStore({ path: storePath });
+const store = makeStore();
 const retriever = new ScopedRetriever();
 const meter = new InMemoryMeter();
 const server = new ThriftMcpServer({
