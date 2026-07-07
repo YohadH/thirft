@@ -572,6 +572,86 @@ describe("dashboard write endpoints", () => {
     expect((await fetch(`${handle.url}/api/nope`)).status).toBe(404);
   });
 
+  it("rejects a mutating request with a mismatched Origin header (403), same-port Origin still works", async () => {
+    const { store } = await freshServer();
+    const m = store.add({ scope: "org", text: "csrf target" }, T0);
+    const { port } = handle.server.address() as { port: number };
+
+    // A malicious cross-origin page's fetch carries an Origin the panel does not own.
+    const evil = await fetch(`${handle.url}/api/memory/${m.id}/pin`, {
+      method: "POST",
+      headers: { origin: "http://evil.example.com" },
+    });
+    expect(evil.status).toBe(403);
+    expect(await evil.json()).toMatchObject({ error: "forbidden_origin" });
+    // Side-effect must NOT have happened.
+    expect(new JsonlStore({ path: memPath }).get(m.id)?.pinned).toBeFalsy();
+
+    // A legitimate same-origin request (Origin == the bound local origin) succeeds.
+    const ok = await fetch(`${handle.url}/api/memory/${m.id}/pin`, {
+      method: "POST",
+      headers: { origin: `http://127.0.0.1:${port}` },
+    });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ ok: true, pinned: true });
+
+    // localhost alias on the same port is also allowed.
+    const okAlias = await fetch(`${handle.url}/api/memory/${m.id}/disable`, {
+      method: "POST",
+      headers: { origin: `http://localhost:${port}` },
+    });
+    expect(okAlias.status).toBe(200);
+  });
+
+  it("rejects a mutating request whose Host header is a non-local (rebound) name (403)", async () => {
+    // DNS-rebinding: the rebound hostname shows up in the Host header. fetch() sets
+    // Host from the URL authority, so drive the socket raw to spoof Host.
+    await freshServer();
+    const { request } = await import("node:http");
+    const { port } = handle.server.address() as { port: number };
+
+    function rawPost(hostHeader: string): Promise<number> {
+      return new Promise((resolve, reject) => {
+        const req = request(
+          { host: "127.0.0.1", port, method: "POST", path: "/api/killswitch", headers: { host: hostHeader } },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode ?? 0);
+          },
+        );
+        req.on("error", reject);
+        req.end();
+      });
+    }
+
+    // A rebound attacker-controlled name is rejected.
+    expect(await rawPost("attacker.example.com")).toBe(403);
+    // The real local Host is accepted (killswitch OFF needs no confirm → 200).
+    expect(await rawPost(`127.0.0.1:${port}`)).toBe(200);
+    expect(await rawPost(`localhost:${port}`)).toBe(200);
+  });
+
+  it("allows a mutating request with NO Origin header (curl / server-to-server)", async () => {
+    // The existing pin/disable/killswitch tests already exercise this path (fetch
+    // does not attach Origin for same-origin server-to-server calls), but assert it
+    // explicitly so the "reject only when Origin is present and mismatched" rule is pinned.
+    const { store } = await freshServer();
+    const m = store.add({ scope: "org", text: "no-origin write" }, T0);
+    const res = await fetch(`${handle.url}/api/memory/${m.id}/pin`, { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, pinned: true });
+  });
+
+  it("does not gate GET reads with the origin guard (dashboard UI keeps loading)", async () => {
+    await freshServer();
+    // A cross-origin GET (e.g. the dashboard fetching its own /api/dashboard, or any
+    // read) must not be 403'd — only mutating methods are guarded.
+    const res = await fetch(`${handle.url}/api/dashboard`, {
+      headers: { origin: "http://evil.example.com" },
+    });
+    expect(res.status).toBe(200);
+  });
+
   it("returns 400 (not 500) for a malformed percent-escape in the path segment", async () => {
     await freshServer();
     // A lone '%' / truncated escape makes decodeURIComponent throw URIError.

@@ -55,6 +55,116 @@ const MAX_MEMORIES = 1000;
 const MAX_EVENTS = 50;
 const MAX_BODY_BYTES = 64 * 1024;
 
+/**
+ * Host/Origin allowlist for mutating requests. The dashboard binds to a local
+ * loopback port, which makes it reachable by any web page open in the same
+ * browser — and by any DNS name that has been rebound to 127.0.0.1. Both are
+ * classic local-server CSRF / DNS-rebinding vectors: a page the owner merely
+ * *visits* could POST to the panel and flip the kill-switch or prune memory,
+ * with no interaction beyond the page load.
+ *
+ * Defense (the same pattern Vite / webpack-dev-server use):
+ *  - Reject any mutating request whose `Host` header is not a local hostname
+ *    (localhost / 127.0.0.1 / ::1 / the configured bind host). This defeats
+ *    DNS rebinding — the rebound name shows up in `Host` and fails the check.
+ *  - Reject any mutating request that carries an `Origin` header not matching a
+ *    local origin. Browsers always attach `Origin` to cross-origin (and to
+ *    non-GET same-origin) fetches, so a malicious page's request is caught here.
+ *  - Requests with NO `Origin` (curl, server-to-server, same-origin non-CORS)
+ *    are allowed — absence of Origin is not an attack signal, and rejecting it
+ *    would break scripted/CLI clients.
+ */
+export interface DashboardOriginGuard {
+  /** Local hostnames allowed in the `Host` header (already lowercased). */
+  allowedHosts: readonly string[];
+  /** The port the server is bound to, used to build the local Origin allowlist. */
+  port: number;
+}
+
+const LOCAL_HOSTNAMES = ["localhost", "127.0.0.1", "::1", "0.0.0.0"] as const;
+
+/** Build the Host/Origin allowlist from the server's configured bind host + port. */
+function buildOriginGuard(host: string, port: number): DashboardOriginGuard {
+  const allowed = new Set<string>(LOCAL_HOSTNAMES);
+  const h = host.trim().toLowerCase();
+  if (h) allowed.add(stripBrackets(h));
+  return { allowedHosts: [...allowed], port };
+}
+
+/** Strip IPv6 brackets so `[::1]` and `::1` compare equal. */
+function stripBrackets(hostname: string): string {
+  return hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
+}
+
+/**
+ * Guard a mutating (non-GET) request against cross-origin / DNS-rebinding writes.
+ * Returns `true` when the request is allowed; when it returns `false` it has
+ * already answered `403`, and the caller must stop processing.
+ */
+function passesOriginGuard(guard: DashboardOriginGuard, req: IncomingMessage, res: ServerResponse): boolean {
+  // ── Host check (DNS-rebinding defense) ──────────────────────────────────────
+  // A present Host header must resolve to a local hostname. Absent Host (HTTP/1.0,
+  // some CLI clients) is allowed — rebinding requires an attacker-controlled name
+  // to appear here, so there is nothing to reject when it is missing.
+  const hostHeader = firstHeader(req.headers.host);
+  if (hostHeader !== undefined) {
+    const hostname = stripBrackets(parseHostname(hostHeader));
+    if (!guard.allowedHosts.includes(hostname)) {
+      sendJson(res, 403, { error: "forbidden_host" });
+      return false;
+    }
+  }
+
+  // ── Origin check (CSRF defense) ─────────────────────────────────────────────
+  // Only reject when Origin is PRESENT and mismatched. No Origin (curl,
+  // server-to-server, same-origin non-CORS) is allowed by design.
+  const originHeader = firstHeader(req.headers.origin);
+  if (originHeader !== undefined && originHeader !== "" && originHeader !== "null") {
+    if (!isAllowedOrigin(guard, originHeader)) {
+      sendJson(res, 403, { error: "forbidden_origin" });
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** True when `origin` (an Origin header value) is a local origin on the bound port. */
+function isAllowedOrigin(guard: DashboardOriginGuard, origin: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false; // unparseable Origin — treat as mismatched
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  const hostname = stripBrackets(parsed.hostname.toLowerCase());
+  if (!guard.allowedHosts.includes(hostname)) return false;
+  // Port must match the server's bound port. An explicit URL port is empty for
+  // the scheme default (80/443); the panel serves plain http on a chosen port,
+  // so require an explicit, matching port.
+  const originPort = parsed.port === "" ? (parsed.protocol === "https:" ? "443" : "80") : parsed.port;
+  return originPort === String(guard.port);
+}
+
+/** Extract the hostname from a `Host` header value (`host` or `host:port`). */
+function parseHostname(hostHeader: string): string {
+  const h = hostHeader.trim().toLowerCase();
+  // IPv6 literal: [::1]:8585 -> ::1
+  if (h.startsWith("[")) {
+    const end = h.indexOf("]");
+    return end === -1 ? h : h.slice(1, end);
+  }
+  const colon = h.indexOf(":");
+  return colon === -1 ? h : h.slice(0, colon);
+}
+
+/** Node header values may be `string | string[]`; take the first. */
+function firstHeader(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
 export function buildDashboardData(panel: ControlPanel, paths: DashboardPaths, now: number): DashboardData {
   const events = readMeterLog(paths.meterLogPath);
   const memories = panel.listMemories();
@@ -74,8 +184,13 @@ export function startDashboardServer(opts: DashboardServerOptions): Promise<Dash
   const host = opts.host ?? DEFAULT_HOST;
   const port = opts.port ?? DEFAULT_PORT;
 
+  // The origin/host allowlist is bound to the port the server actually listens
+  // on. When port 0 (ephemeral) is requested, the guard is rebuilt with the real
+  // assigned port inside the listen callback below.
+  let guard = buildOriginGuard(host, port);
+
   const server = createServer((req, res) => {
-    routeDashboardRequest(opts.panel, opts.paths, req, res);
+    routeDashboardRequest(opts.panel, opts.paths, req, res, guard);
   });
 
   return new Promise((resolve, reject) => {
@@ -83,6 +198,7 @@ export function startDashboardServer(opts: DashboardServerOptions): Promise<Dash
     server.listen(port, host, () => {
       server.off("error", reject);
       const address = server.address() as AddressInfo;
+      guard = buildOriginGuard(host, address.port);
       resolve({ server, url: `http://${host}:${address.port}` });
     });
   });
@@ -100,6 +216,7 @@ export function routeDashboardRequest(
   paths: DashboardPaths,
   req: IncomingMessage,
   res: ServerResponse,
+  guard: DashboardOriginGuard = buildOriginGuard(DEFAULT_HOST, DEFAULT_PORT),
 ): void {
   const url = new URL(req.url ?? "/", "http://localhost");
   const method = (req.method ?? "GET").toUpperCase();
@@ -121,6 +238,9 @@ export function routeDashboardRequest(
 
   // ── writes (POST / DELETE) ───────────────────────────────────────────────────
   if (method === "POST" || method === "DELETE") {
+    // Reject cross-origin / DNS-rebinding writes BEFORE touching the store or
+    // reading the body. passesOriginGuard answers 403 itself on rejection.
+    if (!passesOriginGuard(guard, req, res)) return;
     handleWrite(panel, method, path, req, res);
     return;
   }
