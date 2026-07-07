@@ -20,3 +20,9 @@ coverage/
 /DESIGN*.md
 /USER-GUIDE.md
 /benchmark/results.md
+
+# Binary doc/guide artifacts — generated deliverables, not OSS source.
+# Keep the source repo text-only (SVG/MD stay tracked; these do not).
+*.pdf
+*.docx
+*.pptx
