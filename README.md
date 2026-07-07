@@ -2,6 +2,8 @@
 
 **The MCP memory server that proves how many tokens you saved.** (npm: [`thrift-memory`](https://www.npmjs.com/package/thrift-memory))
 
+🌐 **[thrift-memory landing page →](https://yohadh.github.io/thrift-memory/)** &nbsp;·&nbsp; [npm](https://www.npmjs.com/package/thrift-memory)
+
 > Not affiliated with [Apache Thrift](https://thrift.apache.org/), the RPC framework.
 > This project is always referred to as **Thrift Memory** — an MCP memory layer for coding agents.
 
