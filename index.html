@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thrift Memory — agent memory that respects your token budget</title>
+<meta name="description" content="Cost-first MCP memory server for coding-agent fleets. Hard token budget on every recall, plus a savings receipt that proves what you didn't pay for.">
+<style>
+  :root{
+    --ink:#0a0f0c;
+    --ink2:#0e1511;
+    --surface:#121a15;
+    --line:#1f2b23;
+    --money:#4ee38a;
+    --money-dim:#2f8f58;
+    --tax:#f0b34e;
+    --paper:#f4f0e4;
+    --paper-ink:#171c17;
+    --paper-dim:#6b6f62;
+    --txt:#d8e2da;
+    --dim:#8fa096;
+    --faint:#5c6b61;
+    --mono:"Cascadia Code","JetBrains Mono","Fira Code",Consolas,"SF Mono",ui-monospace,monospace;
+    --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--ink);
+    color:var(--txt);
+    font-family:var(--mono);
+    font-size:16px;
+    line-height:1.6;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:"";
+    position:fixed;inset:0;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    pointer-events:none;z-index:1;
+  }
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px;position:relative;z-index:2}
+  a{color:var(--money);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ── nav ── */
+  nav{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:22px 0;border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:baseline;gap:10px;color:var(--txt)}
+  .brand b{font-size:17px;letter-spacing:.02em}
+  .brand .tick{color:var(--money)}
+  .brand small{color:var(--faint);font-size:12px}
+  .nav-links{display:flex;gap:22px;font-size:13px}
+  .nav-links a{color:var(--dim)}
+  .nav-links a:hover{color:var(--money);text-decoration:none}
+  .nav-links a.gh{
+    color:var(--ink);background:var(--money);padding:7px 14px;border-radius:4px;font-weight:700;
+  }
+  .nav-links a.gh:hover{background:#6df0a0}
+
+  /* ── hero ── */
+  .hero{
+    display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center;
+    padding:88px 0 72px;
+  }
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--money);
+    border:1px solid var(--money-dim);border-radius:999px;padding:5px 14px;margin-bottom:26px;
+  }
+  .eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--money);
+    animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  h1{
+    font-size:clamp(34px,4.6vw,52px);line-height:1.12;font-weight:700;letter-spacing:-.02em;
+    margin-bottom:22px;
+  }
+  h1 em{font-family:var(--serif);font-style:italic;color:var(--money);letter-spacing:0}
+  .hero p.lede{color:var(--dim);font-size:16.5px;max-width:52ch;margin-bottom:32px}
+  .hero p.lede b{color:var(--txt)}
+  .cta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .btn{
+    display:inline-block;padding:13px 24px;border-radius:5px;font-size:14.5px;font-weight:700;
+    font-family:var(--mono);transition:transform .15s ease, background .15s ease;
+  }
+  .btn:hover{text-decoration:none;transform:translateY(-2px)}
+  .btn-primary{background:var(--money);color:var(--ink)}
+  .btn-primary:hover{background:#6df0a0}
+  .btn-ghost{border:1px solid var(--line);color:var(--txt)}
+  .btn-ghost:hover{border-color:var(--money-dim)}
+  .try-line{margin-top:20px;font-size:13px;color:var(--faint)}
+  .try-line code{color:var(--tax);background:var(--ink2);padding:3px 9px;border-radius:4px;border:1px solid var(--line)}
+
+  /* ── the receipt ── */
+  .receipt-holder{position:relative;animation:drop .7s cubic-bezier(.2,.9,.3,1.1) both .15s}
+  @keyframes drop{from{opacity:0;transform:translateY(-26px) rotate(1.5deg)}to{opacity:1;transform:translateY(0) rotate(1.5deg)}}
+  .receipt{
+    background:var(--paper);color:var(--paper-ink);
+    padding:26px 26px 34px;max-width:330px;margin:0 auto;
+    transform:rotate(1.5deg);
+    box-shadow:0 24px 60px rgba(0,0,0,.55), 0 2px 0 rgba(0,0,0,.3);
+    font-size:13px;line-height:1.75;
+    /* perforated bottom edge */
+    clip-path:polygon(0 0,100% 0,100% calc(100% - 9px),
+      97.5% 100%,95% calc(100% - 9px),92.5% 100%,90% calc(100% - 9px),87.5% 100%,85% calc(100% - 9px),
+      82.5% 100%,80% calc(100% - 9px),77.5% 100%,75% calc(100% - 9px),72.5% 100%,70% calc(100% - 9px),
+      67.5% 100%,65% calc(100% - 9px),62.5% 100%,60% calc(100% - 9px),57.5% 100%,55% calc(100% - 9px),
+      52.5% 100%,50% calc(100% - 9px),47.5% 100%,45% calc(100% - 9px),42.5% 100%,40% calc(100% - 9px),
+      37.5% 100%,35% calc(100% - 9px),32.5% 100%,30% calc(100% - 9px),27.5% 100%,25% calc(100% - 9px),
+      22.5% 100%,20% calc(100% - 9px),17.5% 100%,15% calc(100% - 9px),12.5% 100%,10% calc(100% - 9px),
+      7.5% 100%,5% calc(100% - 9px),2.5% 100%,0 calc(100% - 9px));
+  }
+  .receipt .r-head{text-align:center;letter-spacing:.18em;font-weight:700;font-size:12px}
+  .receipt .r-sub{text-align:center;color:var(--paper-dim);font-size:11px;margin-bottom:10px}
+  .receipt hr{border:none;border-top:1.5px dashed #b9b5a4;margin:10px 0}
+  .receipt .row{display:flex;justify-content:space-between;gap:12px}
+  .receipt .row span:first-child{color:var(--paper-dim)}
+  .receipt .row.total{font-weight:700;font-size:15px}
+  .receipt .row.total span:first-child{color:var(--paper-ink)}
+  .receipt .saved{color:#0c7a3f}
+  .receipt .stamp{
+    margin:14px auto 0;width:fit-content;text-align:center;
+    border:2.5px solid #0c7a3f;color:#0c7a3f;border-radius:6px;
+    padding:4px 14px;font-weight:700;letter-spacing:.12em;font-size:12px;
+    transform:rotate(-5deg);opacity:.85;
+  }
+  .receipt .r-foot{text-align:center;color:var(--paper-dim);font-size:10.5px;margin-top:12px;letter-spacing:.06em}
+
+  /* ── certified strip ── */
+  .certified{
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:var(--ink2);
+  }
+  .certified .wrap{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:34px 24px;
+  }
+  .stat{text-align:center}
+  .stat .num{font-size:clamp(26px,3.4vw,38px);font-weight:700;color:var(--money);letter-spacing:-.02em}
+  .stat .lbl{font-size:12px;color:var(--dim);margin-top:4px;letter-spacing:.05em}
+  .certified .note{
+    grid-column:1/-1;text-align:center;font-size:12px;color:var(--faint);
+  }
+
+  /* ── sections ── */
+  section{padding:84px 0}
+  .sec-kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--tax);margin-bottom:12px}
+  h2{font-size:clamp(24px,3vw,34px);letter-spacing:-.01em;margin-bottom:14px;font-weight:700}
+  h2 em{font-family:var(--serif);font-style:italic;color:var(--money)}
+  .sec-lede{color:var(--dim);max-width:62ch;margin-bottom:44px}
+  .sec-lede code{color:var(--tax)}
+
+  /* how it works */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:step}
+  .step{
+    background:var(--surface);border:1px solid var(--line);border-radius:8px;
+    padding:26px 22px;position:relative;transition:border-color .2s ease, transform .2s ease;
+  }
+  .step:hover{border-color:var(--money-dim);transform:translateY(-4px)}
+  .step::before{
+    counter-increment:step;content:"0" counter(step);
+    font-size:13px;color:var(--money);letter-spacing:.1em;
+    display:block;margin-bottom:14px;
+  }
+  .step h3{font-size:16.5px;margin-bottom:10px}
+  .step p{font-size:13.5px;color:var(--dim)}
+  .step code{color:var(--tax);font-size:12.5px}
+  .step .mini{
+    margin-top:16px;background:var(--ink);border:1px solid var(--line);border-radius:6px;
+    padding:12px 14px;font-size:12px;line-height:1.7;color:var(--dim);overflow-x:auto;white-space:pre;
+  }
+  .mini .g{color:var(--money)} .mini .y{color:var(--tax)} .mini .c{color:var(--faint)}
+
+  /* quickstart */
+  .install-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+  .term{
+    background:var(--ink2);border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  }
+  .term .bar{
+    display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line);
+    font-size:12px;color:var(--faint);
+  }
+  .term .bar i{width:10px;height:10px;border-radius:50%;background:var(--line);font-style:normal}
+  .term .bar i.g{background:var(--money-dim)}
+  .term pre{
+    padding:20px;font-family:var(--mono);font-size:13px;line-height:1.8;overflow-x:auto;color:var(--txt);
+  }
+  .term .c{color:var(--faint)} .term .g{color:var(--money)} .term .y{color:var(--tax)}
+  .audit-callout{
+    border:1px dashed var(--money-dim);border-radius:8px;padding:22px 24px;
+    display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:space-between;
+  }
+  .audit-callout p{font-size:13.5px;color:var(--dim);max-width:52ch}
+  .audit-callout p b{color:var(--txt)}
+  .audit-callout code{
+    color:var(--money);background:var(--ink2);border:1px solid var(--line);
+    padding:8px 16px;border-radius:5px;font-size:13.5px;white-space:nowrap;
+  }
+
+  /* comparison */
+  .compare-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+  th,td{padding:14px 16px;text-align:left;border-bottom:1px solid var(--line)}
+  thead th{
+    background:var(--ink2);font-size:12px;letter-spacing:.06em;color:var(--dim);font-weight:400;
+  }
+  thead th.hl{color:var(--money);font-weight:700}
+  tbody tr:last-child td{border-bottom:none}
+  td.hl{color:var(--money);font-weight:700;background:rgba(78,227,138,.045)}
+  td.no{color:var(--faint)}
+  td:first-child{color:var(--dim)}
+  .honest{
+    margin-top:22px;font-size:13.5px;color:var(--dim);max-width:72ch;
+    border-left:3px solid var(--tax);padding-left:18px;
+  }
+  .honest b{color:var(--txt)}
+
+  /* footer */
+  footer{
+    border-top:1px solid var(--line);background:var(--ink2);
+    padding:76px 0 44px;text-align:center;
+  }
+  footer h2{margin-bottom:10px}
+  footer .sub{color:var(--dim);font-size:14px;margin-bottom:30px}
+  footer .cta-row{justify-content:center;margin-bottom:44px}
+  footer .fine{font-size:12px;color:var(--faint);line-height:2}
+  footer .fine a{color:var(--dim)}
+
+  @media(max-width:860px){
+    .hero{grid-template-columns:1fr;gap:48px;padding:56px 0}
+    .certified .wrap{grid-template-columns:repeat(2,1fr)}
+    .steps{grid-template-columns:1fr}
+    .install-grid{grid-template-columns:1fr}
+    .nav-links a:not(.gh){display:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <div class="brand"><b><span class="tick">▮</span> thrift-memory</b><small>// MCP memory server</small></div>
+    <div class="nav-links">
+      <a href="#how">how it works</a>
+      <a href="#install">install</a>
+      <a href="#compare">vs the others</a>
+      <a class="gh" href="https://github.com/YohadH/thrift-memory">★ Star on GitHub</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div>
+      <span class="eyebrow">Open source · Apache-2.0 · MCP</span>
+      <h1>Memory for agent fleets that respects your <em>token budget</em>.</h1>
+      <p class="lede">Every session, your coding agents reload the same <b>MEMORY.md</b>, <b>AGENTS.md</b>, and project context — a context tax you pay again and again. Thrift Memory recalls only what the task needs, under a <b>hard token budget</b>, and hands you a receipt proving what you didn't pay for.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/YohadH/thrift-memory">★ Star on GitHub</a>
+        <a class="btn btn-ghost" href="#install">Install in 60 seconds</a>
+      </div>
+      <p class="try-line">See your own waste first — nothing installed: <code>npx -y thrift-memory audit</code></p>
+    </div>
+    <div class="receipt-holder">
+      <div class="receipt">
+        <div class="r-head">THRIFT MEMORY</div>
+        <div class="r-sub">*** SAVINGS RECEIPT ***</div>
+        <hr>
+        <div class="row"><span>agentId</span><span>dev</span></div>
+        <div class="row"><span>tokenBudget</span><span>2,000 (hard)</span></div>
+        <hr>
+        <div class="row"><span>baselineTokens</span><span>2,100</span></div>
+        <div class="row"><span>injectedTokens</span><span>420</span></div>
+        <hr>
+        <div class="row total saved"><span>savedTokens</span><span>1,680</span></div>
+        <div class="row"><span>savings rate</span><span class="saved">80%</span></div>
+        <div class="stamp">NOT PAID ✓</div>
+        <div class="r-foot">saved = baseline − injected<br>logged on every recall</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="certified">
+  <div class="wrap">
+    <div class="stat"><div class="num">87.2%</div><div class="lbl">token savings</div></div>
+    <div class="stat"><div class="num">24</div><div class="lbl">agent fleet</div></div>
+    <div class="stat"><div class="num">0pp</div><div class="lbl">quality-parity gap</div></div>
+    <div class="stat"><div class="num">QA ✓</div><div class="lbl">certified</div></div>
+    <div class="note">Measured across a real 24-agent fleet running in production — quality-paired against full-context runs, certified by an independent QA pass.</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <section id="how">
+    <div class="sec-kicker">// how it works</div>
+    <h2>Recall under a budget. <em>Prove</em> the saving.</h2>
+    <p class="sec-lede">Three tools — <code>remember</code>, <code>recall</code>, <code>search_memory</code> — backed by a local JSONL store. No database, no LLM call on the write path, no infrastructure.</p>
+    <div class="steps">
+      <div class="step">
+        <h3>Call <code>recall()</code> with a hard budget</h3>
+        <p>The agent asks for memory with a hard <code>tokenBudget</code> ceiling. Not a hint — a cap. The recall can never inject more than you allowed.</p>
+        <div class="mini"><span class="y">recall</span>(
+  agentId: <span class="g">"dev"</span>,
+  tokenBudget: <span class="g">2000</span>,
+  task: <span class="g">"how do I store money?"</span>
+)</div>
+      </div>
+      <div class="step">
+        <h3>Get a relevance-ranked slice</h3>
+        <p>Only memories relevant to the task make the cut — irrelevant notes are dropped for relevance, not just squeezed for budget. A relevance floor keeps noise out even when budget remains.</p>
+        <div class="mini"><span class="c">// injected:</span>
+<span class="g">•</span> Money values are integer
+  cents, never floats.
+<span class="c">// dropped: deploy cadence,</span>
+<span class="c">// cache policy (irrelevant)</span></div>
+      </div>
+      <div class="step">
+        <h3>Read the metering receipt</h3>
+        <p>Every recall logs <code>baselineTokens</code> vs <code>injectedTokens</code> vs <code>savedTokens</code> — plus budget-pressure signals so an agent never silently acts on a starved slice.</p>
+        <div class="mini">{
+  baselineTokens: <span class="y">2100</span>,
+  injectedTokens: <span class="y">420</span>,
+  savedTokens: <span class="g">1680</span>,
+  budgetPressure: <span class="g">"none"</span>
+}</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="sec-kicker">// install</div>
+    <h2>Running in <em>60 seconds</em>.</h2>
+    <p class="sec-lede">Claude Code plugin for the one-command path, or plain MCP config for any MCP-capable client.</p>
+    <div class="install-grid">
+      <div class="term">
+        <div class="bar"><i class="g"></i><i></i><i></i>Option A — Claude Code plugin</div>
+        <pre><span class="c"># MCP server + memory-aware agent + commands, one step</span>
+<span class="g">/plugin</span> marketplace add YohadH/thrift-memory
+<span class="g">/plugin</span> install thrift-memory@thrift
+
+<span class="c"># registers the `thrift` MCP server automatically —</span>
+<span class="c"># recall / remember / search_memory, no config editing</span></pre>
+      </div>
+      <div class="term">
+        <div class="bar"><i class="g"></i><i></i><i></i>Option B — any MCP client</div>
+        <pre><span class="g">npm</span> install -g thrift-memory
+
+<span class="c"># then add to your MCP config:</span>
+{ <span class="y">"mcpServers"</span>: {
+    <span class="y">"thrift"</span>: { <span class="y">"command"</span>: <span class="g">"npx"</span>,
+                 <span class="y">"args"</span>: [<span class="g">"thrift-memory"</span>] } } }</pre>
+      </div>
+    </div>
+    <div class="audit-callout">
+      <p><b>Not ready to install anything?</b> Audit the context tax you're already paying — it scans your repo's CLAUDE.md, AGENTS.md, cursor/windsurf rules and prints the bill per session, per day, per month.</p>
+      <code>npx -y thrift-memory audit</code>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="sec-kicker">// why not just Mem0 / Zep / Graphiti?</div>
+    <h2>They optimize how <em>smart</em> recall is. We optimize what it <em>costs</em>.</h2>
+    <p class="sec-lede">Mem0, Zep, and Graphiti compete on recall quality — temporal graphs, entity extraction, personalization. Thrift Memory competes on a different axis entirely: cap the tokens, prove the saving.</p>
+    <div class="compare-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th class="hl">Thrift Memory</th>
+            <th>Mem0</th>
+            <th>Zep</th>
+            <th>Graphiti</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Primary axis</td>
+            <td class="hl">Cost-first / budgeted recall</td>
+            <td>Recall quality (personalization)</td>
+            <td>Recall quality (temporal memory)</td>
+            <td>Recall quality (knowledge graph)</td>
+          </tr>
+          <tr>
+            <td>Hard token budget on recall</td>
+            <td class="hl">Yes</td>
+            <td class="no">No</td>
+            <td class="no">No</td>
+            <td class="no">No</td>
+          </tr>
+          <tr>
+            <td>Savings receipt (baseline vs injected vs saved)</td>
+            <td class="hl">Yes — every recall</td>
+            <td class="no">No</td>
+            <td class="no">No</td>
+            <td class="no">No</td>
+          </tr>
+          <tr>
+            <td>LLM call required to write a memory</td>
+            <td class="hl">No — cheap write path</td>
+            <td class="no">Yes</td>
+            <td class="no">Yes</td>
+            <td class="no">Yes</td>
+          </tr>
+          <tr>
+            <td>Backing store</td>
+            <td class="hl">Local JSONL, no DB</td>
+            <td class="no">Vector store + optional graph</td>
+            <td class="no">Managed / self-hosted service</td>
+            <td class="no">Bring-your-own graph DB</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="honest"><b>The honest version:</b> if you need the deepest, smartest recall, use them — they're more mature at it. If your fleet keeps re-paying the context tax on every run and you want to cap and measure that cost with zero extra infrastructure, that's the gap Thrift Memory fills. They're complementary: Thrift Memory can sit in front of a heavier store as the budget-and-metering layer.</p>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <h2>Stop guessing. Start <em>metering</em>.</h2>
+    <p class="sub">Apache-2.0 · local-first · every recall returns a receipt.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/YohadH/thrift-memory">★ Star on GitHub</a>
+      <a class="btn btn-ghost" href="https://github.com/YohadH/thrift-memory#readme">Read the docs →</a>
+    </div>
+    <p class="fine">
+      thrift-memory on <a href="https://www.npmjs.com/package/thrift-memory">npm</a> · <a href="https://github.com/YohadH/thrift-memory">GitHub</a> · <a href="https://github.com/YohadH/thrift-memory/blob/public-clean/docs/FAQ.md">FAQ</a><br>
+      Thrift Memory is an MCP memory layer for coding agents — not affiliated with Apache Thrift, the RPC framework.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
