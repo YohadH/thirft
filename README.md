@@ -148,7 +148,7 @@ That registers the `thrift` MCP server automatically (via `npx thrift-memory`),
 so `recall` / `remember` / `search_memory` are available with no config editing.
 See [`plugins/thrift-memory/`](./plugins/thrift-memory) for what the plugin bundles.
 
-**Automatic memory (v0.2.0):** the plugin ships a `SessionStart` hook that runs
+**Automatic memory (plugin v0.2.0):** the plugin ships a `SessionStart` hook that runs
 `thrift-memory session-context` and injects a budgeted memory slice (default
 1,500 tokens) directly into context at every session **start**, **resume**,
 **`/clear`**, and **post-compaction**. Your durable memories survive context
