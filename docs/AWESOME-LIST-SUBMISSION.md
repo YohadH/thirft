@@ -24,7 +24,7 @@ collision with Apache Thrift (the RPC framework).
 | Open-source license | ✅ | Apache-2.0 (`LICENSE`, `package.json` `"license": "Apache-2.0"`) |
 | Actually an MCP server | ✅ | stdio MCP server exposing `remember` / `recall` / `search_memory` (README "MCP Tools") |
 | Public GitHub repo | ✅ | <https://github.com/YohadH/thrift-memory> (public since 2026-07-01) |
-| Published to npm | ✅ | <https://www.npmjs.com/package/thrift-memory> (v0.0.6) |
+| Published to npm | ✅ | <https://www.npmjs.com/package/thrift-memory> (v0.0.7) |
 
 ---
 
