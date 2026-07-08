@@ -343,6 +343,53 @@ describe("FileMemoryStore + CompositeMemoryStore", () => {
     expect(dev.memories).toHaveLength(0);
   });
 
+  // BUG-THRFT: agentId derivation used to lowercase the whole path, so a
+  // mixed-case dir memory/MyAgent/ was classified as agentId "myagent" and could
+  // never be recalled by the caller's real agentId "MyAgent" (unmatchable
+  // recall). The fix preserves on-disk casing, matching how the writable
+  // JsonlStore already stores agentId verbatim.
+  //
+  // NOTE: this asserts casing is PRESERVED, not that recall is case-insensitive.
+  // We deliberately do not fabricate two sibling dirs (memory/MyAgent +
+  // memory/myagent) because on a case-insensitive filesystem (Windows/macOS)
+  // they collapse to one dir and the fixture would not represent the real bug.
+  it("preserves on-disk casing of a mixed-case agent dir (matchable recall, no case-fold)", () => {
+    mkdirSync(join(dir, "memory", "MixedCaseAgent"), { recursive: true });
+    writeFileSync(
+      join(dir, "memory", "MixedCaseAgent", "notes.md"),
+      "MixedCaseAgent note about deploy canaries.",
+    );
+
+    const store = new FileMemoryStore({ rootDir: dir });
+
+    // Classification preserves the exact on-disk casing (not "mixedcaseagent").
+    const rec = store.list({ scope: "agent" });
+    expect(rec).toHaveLength(1);
+    expect(rec[0].agentId).toBe("MixedCaseAgent");
+    expect(rec[0].tags).toContain("agent:MixedCaseAgent");
+
+    // Recall by the caller's real (matching) agentId returns the note — this is
+    // the "unmatchable recall" regression the old lowercasing caused.
+    const match = new ScopedRetriever().recall(store, {
+      agentId: "MixedCaseAgent",
+      task: "deploy canaries note",
+      tokenBudget: 1_000,
+    });
+    expect(match.memories.map((m) => m.text)).toEqual([
+      "MixedCaseAgent note about deploy canaries.",
+    ]);
+    expect(match.memories[0].agentId).toBe("MixedCaseAgent");
+
+    // A caller with a different casing must NOT match — recall stays strict, so
+    // memories cannot bleed across agents that differ only by case.
+    const folded = new ScopedRetriever().recall(store, {
+      agentId: "mixedcaseagent",
+      task: "deploy canaries note",
+      tokenBudget: 1_000,
+    });
+    expect(folded.memories).toHaveLength(0);
+  });
+
   it("does not treat shared memory folders like reports as agent ids", () => {
     mkdirSync(join(dir, "memory", "reports"), { recursive: true });
     writeFileSync(join(dir, "memory", "reports", "takshi.md"), "Report-only text should not become agent memory.");

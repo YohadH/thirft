@@ -195,11 +195,20 @@ function classifyMemoryFile(
   defaultScope: Scope,
   extraTags: string[],
 ): SourceFile | undefined {
-  const norm = relPath.replace(/\\/g, "/").toLowerCase();
+  // `norm` is lowercased ONLY for case-insensitive *path pattern* matching
+  // (MEMORY.md vs memory.md, .Cursor/rules, reserved-dir names). The agentId
+  // itself must preserve the on-disk directory casing, otherwise a mixed-case
+  // dir (e.g. memory/MyAgent/) would be stored as "myagent" and never match the
+  // caller's real agentId at recall time (unmatchable recall), or collide with a
+  // sibling memory/myagent/ dir (cross-agent bleed). See BUG-THRFT. The writable
+  // JsonlStore already preserves agentId casing verbatim; this keeps the file
+  // store consistent with it.
+  const normDir = relPath.replace(/\\/g, "/");
+  const norm = normDir.toLowerCase();
   const base = basename(norm);
-  const agentMatch = /^memory\/([^/]+)\/([^/]+\.(md|mdc))$/.exec(norm);
-  if (agentMatch && !RESERVED_AGENT_MEMORY_DIRS.has(agentMatch[1])) {
-    const agentId = agentMatch[1];
+  const agentMatch = /^memory\/([^/]+)\/([^/]+\.(md|mdc))$/i.exec(normDir);
+  if (agentMatch && !RESERVED_AGENT_MEMORY_DIRS.has(agentMatch[1].toLowerCase())) {
+    const agentId = agentMatch[1]; // on-disk casing preserved
     return {
       path: fullPath,
       scope: "agent",
