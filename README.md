@@ -191,15 +191,22 @@ npx thrift-memory \
 By default, the MCP server also scans the current working directory for existing
 agent context files: `MEMORY.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
 `.cursorrules`, `.windsurfrules`, `.clinerules`, `.cursor/rules/*.md|*.mdc`,
-`.windsurf/rules/*.md|*.mdc`, and `.github/copilot-instructions.md`.
+`.windsurf/rules/*.md|*.mdc`, `.github/copilot-instructions.md`, and
+agent-specific folders matching `memory/<agentId>/*.md`.
 
 Those files are treated as **read-only recall sources**. `remember()` still writes
 new durable memories to the JSONL store at `--store-path`, so the runtime model is:
 
 ```text
-MEMORY.md / AGENTS.md / rules files  +  ~/.thrift/memories.jsonl
-             read-only source        +       writable overlay
+MEMORY.md / AGENTS.md / rules files / memory/<agentId>/*.md  +  ~/.thrift/memories.jsonl
+                       read-only sources                     +       writable overlay
 ```
+
+Files under `memory/<agentId>/*.md` are loaded as agent-scoped memories, so
+`memory/takshi/crm.md` is visible to `agentId: "takshi"`, while
+`memory/qa-manager/smoke.md` is visible to `agentId: "qa-manager"`. Shared
+folders such as `memory/reports`, `memory/feed`, and `memory/advice` are not
+treated as agent IDs.
 
 File edits are picked up on the next recall/search. To scan a different project
 root, pass `--file-root=/path/to/repo` or set `THRIFT_FILE_ROOT`. To disable

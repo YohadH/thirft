@@ -311,6 +311,47 @@ describe("FileMemoryStore + CompositeMemoryStore", () => {
     expect(texts.some((t) => t.includes("Nested agent note"))).toBe(false);
   });
 
+  it("maps memory/<agentId>/*.md to agent-scoped file memories dynamically", () => {
+    mkdirSync(join(dir, "memory", "takshi"), { recursive: true });
+    mkdirSync(join(dir, "memory", "qa-manager"), { recursive: true });
+    writeFileSync(join(dir, "memory", "takshi", "crm.md"), "Takshi CRM has overdue buyer follow-ups.");
+    writeFileSync(join(dir, "memory", "qa-manager", "smoke.md"), "QA smoke tests cover the proxy health check.");
+
+    const store = new FileMemoryStore({ rootDir: dir });
+    const takshi = new ScopedRetriever().recall(store, {
+      agentId: "takshi",
+      task: "overdue buyer follow-ups crm",
+      tokenBudget: 1_000,
+    });
+    const qa = new ScopedRetriever().recall(store, {
+      agentId: "qa-manager",
+      task: "proxy health smoke tests",
+      tokenBudget: 1_000,
+    });
+    const dev = new ScopedRetriever().recall(store, {
+      agentId: "dev",
+      task: "overdue buyer follow-ups crm proxy health",
+      tokenBudget: 1_000,
+    });
+
+    expect(takshi.memories.map((m) => m.text)).toContain("Takshi CRM has overdue buyer follow-ups.");
+    expect(takshi.memories[0].scope).toBe("agent");
+    expect(takshi.memories[0].agentId).toBe("takshi");
+    expect(takshi.memories[0].tags).toContain("agent:takshi");
+    expect(qa.memories.map((m) => m.text)).toContain("QA smoke tests cover the proxy health check.");
+    expect(qa.memories[0].agentId).toBe("qa-manager");
+    expect(dev.memories).toHaveLength(0);
+  });
+
+  it("does not treat shared memory folders like reports as agent ids", () => {
+    mkdirSync(join(dir, "memory", "reports"), { recursive: true });
+    writeFileSync(join(dir, "memory", "reports", "takshi.md"), "Report-only text should not become agent memory.");
+
+    const store = new FileMemoryStore({ rootDir: dir });
+
+    expect(store.list()).toHaveLength(0);
+  });
+
   it("merges file-backed records with the writable JSONL overlay", () => {
     writeFileSync(join(dir, "MEMORY.md"), "Frontend uses server-rendered forms.");
     const writable = new JsonlStore({ path: memPath });

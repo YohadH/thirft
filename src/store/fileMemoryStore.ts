@@ -49,6 +49,21 @@ const ROOT_CONTEXT_BASENAMES = new Set([
   ".clinerules",
 ]);
 
+const RESERVED_AGENT_MEMORY_DIRS = new Set([
+  "advice",
+  "archive",
+  "feed",
+  "reports",
+  "shared",
+]);
+
+interface SourceFile {
+  path: string;
+  scope: Scope;
+  agentId?: string;
+  tags: string[];
+}
+
 export class FileMemoryStore implements MemoryStore {
   private readonly rootDir: string;
   private readonly scope: Scope;
@@ -97,13 +112,13 @@ export class FileMemoryStore implements MemoryStore {
   /** Re-scan source files. Called on every read so file edits are visible live. */
   refresh(): void {
     const next = new Map<string, MemoryRecord>();
-    for (const file of findMemoryFiles(this.rootDir, this.maxDepth)) {
-      const relPath = relative(this.rootDir, file).replace(/\\/g, "/");
+    for (const source of findMemoryFiles(this.rootDir, this.maxDepth, this.scope, this.tags)) {
+      const relPath = relative(this.rootDir, source.path).replace(/\\/g, "/");
       let text: string;
       let updatedAt: number;
       try {
-        text = readFileSync(file, "utf8");
-        updatedAt = Math.floor(statSync(file).mtimeMs);
+        text = readFileSync(source.path, "utf8");
+        updatedAt = Math.floor(statSync(source.path).mtimeMs);
       } catch {
         continue;
       }
@@ -112,14 +127,10 @@ export class FileMemoryStore implements MemoryStore {
         const id = fileRecordId(relPath, index);
         next.set(id, {
           id,
-          scope: this.scope,
+          scope: source.scope,
+          agentId: source.agentId,
           text: chunk,
-          tags: [
-            "source:file",
-            `path:${relPath}`,
-            `file:${basename(relPath)}`,
-            ...this.tags,
-          ],
+          tags: source.tags,
           pinned: false,
           disabled: false,
           tokens: estimateTokens(chunk),
@@ -132,13 +143,26 @@ export class FileMemoryStore implements MemoryStore {
   }
 }
 
-function findMemoryFiles(rootDir: string, maxDepth: number): string[] {
-  const out: string[] = [];
-  walk(rootDir, rootDir, 0, maxDepth, out);
-  return out.sort();
+function findMemoryFiles(
+  rootDir: string,
+  maxDepth: number,
+  defaultScope: Scope,
+  extraTags: string[],
+): SourceFile[] {
+  const out: SourceFile[] = [];
+  walk(rootDir, rootDir, 0, maxDepth, defaultScope, extraTags, out);
+  return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-function walk(dir: string, root: string, depth: number, maxDepth: number, out: string[]): void {
+function walk(
+  dir: string,
+  root: string,
+  depth: number,
+  maxDepth: number,
+  defaultScope: Scope,
+  extraTags: string[],
+  out: SourceFile[],
+): void {
   if (depth > maxDepth) return;
   let entries: string[];
   try {
@@ -156,21 +180,57 @@ function walk(dir: string, root: string, depth: number, maxDepth: number, out: s
     }
     if (st.isDirectory()) {
       if (SKIP_DIRS.has(entry.toLowerCase())) continue;
-      walk(full, root, depth + 1, maxDepth, out);
-    } else if (st.isFile() && isMemoryFile(relative(root, full))) {
-      out.push(full);
+      walk(full, root, depth + 1, maxDepth, defaultScope, extraTags, out);
+    } else if (st.isFile()) {
+      const relPath = relative(root, full);
+      const source = classifyMemoryFile(relPath, full, defaultScope, extraTags);
+      if (source) out.push(source);
     }
   }
 }
 
-function isMemoryFile(relPath: string): boolean {
+function classifyMemoryFile(
+  relPath: string,
+  fullPath: string,
+  defaultScope: Scope,
+  extraTags: string[],
+): SourceFile | undefined {
   const norm = relPath.replace(/\\/g, "/").toLowerCase();
   const base = basename(norm);
-  if (ROOT_CONTEXT_BASENAMES.has(base)) return norm === base;
-  if (norm === ".github/copilot-instructions.md") return true;
-  if (/(^|\/)\.cursor\/rules\/.+\.(md|mdc)$/.test(norm)) return true;
-  if (/(^|\/)\.windsurf\/rules\/.+\.(md|mdc)$/.test(norm)) return true;
-  return false;
+  const agentMatch = /^memory\/([^/]+)\/([^/]+\.(md|mdc))$/.exec(norm);
+  if (agentMatch && !RESERVED_AGENT_MEMORY_DIRS.has(agentMatch[1])) {
+    const agentId = agentMatch[1];
+    return {
+      path: fullPath,
+      scope: "agent",
+      agentId,
+      tags: fileTags(relPath, extraTags, [`agent:${agentId}`]),
+    };
+  }
+  if (ROOT_CONTEXT_BASENAMES.has(base) && norm === base) {
+    return { path: fullPath, scope: defaultScope, tags: fileTags(relPath, extraTags) };
+  }
+  if (norm === ".github/copilot-instructions.md") {
+    return { path: fullPath, scope: defaultScope, tags: fileTags(relPath, extraTags) };
+  }
+  if (/(^|\/)\.cursor\/rules\/.+\.(md|mdc)$/.test(norm)) {
+    return { path: fullPath, scope: defaultScope, tags: fileTags(relPath, extraTags) };
+  }
+  if (/(^|\/)\.windsurf\/rules\/.+\.(md|mdc)$/.test(norm)) {
+    return { path: fullPath, scope: defaultScope, tags: fileTags(relPath, extraTags) };
+  }
+  return undefined;
+}
+
+function fileTags(relPath: string, extraTags: string[], scopedTags: string[] = []): string[] {
+  const normalized = relPath.replace(/\\/g, "/");
+  return [
+    "source:file",
+    `path:${normalized}`,
+    `file:${basename(normalized)}`,
+    ...scopedTags,
+    ...extraTags,
+  ];
 }
 
 function fileRecordId(relPath: string, index: number): string {
