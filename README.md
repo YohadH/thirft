@@ -423,7 +423,7 @@ methodology.
 
 ### Verified
 
-**Unit tests.** `npm test` — 156 tests across 12 files, including a dedicated
+**Unit tests.** `npm test` — 157 tests across 12 files, including a dedicated
 `test/contextWatch.test.ts` that covers the clamp table (1M→200k, 200k→80k,
 128k→64k, 32k→16k step sizes), the step-crossing state machine (first
 crossing fires, same step doesn't re-fire, the next step fires again,
