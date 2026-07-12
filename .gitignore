@@ -5,6 +5,10 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# Local Claude Code / MCP editor config — not part of the package.
+/.claude/
+/.mcp.json
+
 # Local memory stores / scratch data
 *.thrift.db
 *.thrift.jsonl
