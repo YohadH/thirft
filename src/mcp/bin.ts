@@ -7,10 +7,12 @@
  *   npx thrift-memory --store-path=/my/path/memories.jsonl --default-budget=4000
  *   npx thrift-memory audit           # scan this repo for agent memory files, report the token waste
  *   npx thrift-memory session-context # print a budgeted memory slice (for SessionStart hooks)
+ *   npx thrift-memory context-watch   # hook: detect context-% crossings, prompt to save memory + /compact
  *
  * Subcommand flags:
  *   audit:            --path= --sessions= --budget= --price-per-mtok=
  *   session-context:  --budget= --agent-id= --store-path= --meter-path=
+ *   context-watch:    --step-pct= --min-step-tokens= --max-step-pct= --window-tokens= --state-path=
  *
  * Env vars (lower precedence than CLI flags):
  *   THRIFT_STORE_PATH      path to JSONL store file

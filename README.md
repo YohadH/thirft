@@ -376,6 +376,42 @@ It reads:
 See [docs/case-study.md](./docs/case-study.md) for a sanitized example of how to
 interpret the numbers.
 
+## Context Watch
+
+The plugin's `UserPromptSubmit` hook runs `thrift-memory context-watch` on every
+prompt. It tracks context usage against the model's window and, when usage
+crosses a step boundary, injects an instruction telling the agent to save
+durable facts via `remember` and suggests running `/compact` — so decisions
+survive compaction instead of being silently dropped.
+
+Step size is clamped between a floor and a ceiling so it neither fires too
+often on small windows nor too rarely on huge ones:
+
+```
+step = clamp(stepPct% × window, minStepTokens, maxStepPct% × window)
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--step-pct=` | `20` | Target step size, as a percent of the window |
+| `--min-step-tokens=` | `80000` | Floor on step size, in tokens |
+| `--max-step-pct=` | `50` | Ceiling on step size, as a percent of the window |
+| `--window-tokens=` | (auto) | Override the detected model window size |
+| `--state-path=` | `~/.thrift/context-watch/` | Where step-crossing state is persisted |
+
+**The save → compact → reload loop:** `context-watch` prompts a save before a
+step boundary is crossed, `PreCompact` prints compaction guidance as a safety
+net, and the pre-existing `SessionStart` hook reloads a budgeted memory slice
+immediately after — closing the loop so no durable fact is lost to compaction.
+
+**Opt out** by removing the `UserPromptSubmit` (and optionally `PreCompact`)
+entries from [`plugins/thrift-memory/hooks/hooks.json`](./plugins/thrift-memory/hooks/hooks.json).
+
+Measured savings: `node benchmark/context-watch.mjs` shows ~72.5% fewer tokens
+reloaded across simulated windows (37,744 baseline vs. 10,367 injected, saving
+27,377 tokens) — see [Synthetic Benchmark](#synthetic-benchmark) above for
+methodology.
+
 ## Proxy And Rate Limits
 
 The proxy is optional. Use it when an agent can point its LLM `base_url` at a
