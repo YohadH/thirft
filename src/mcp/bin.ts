@@ -175,7 +175,7 @@ if (positional[0] === "context-watch") {
           minStepTokens: intFlag("min-step-tokens", 80_000),
           maxStepPct: intFlag("max-step-pct", 50),
           statePath: flag("state-path") ?? join(homedir(), ".thrift", "context-watch"),
-          windowTokens: flag("window-tokens") ? intFlag("window-tokens", 0) || undefined : undefined,
+          windowTokens: flag("window-tokens") !== undefined ? intFlag("window-tokens", 0) : undefined,
         },
       );
       if (message) console.log(message);

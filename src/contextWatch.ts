@@ -11,7 +11,7 @@
  * output", never a thrown error or non-zero exit from the caller's side.
  */
 
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Default window size (tokens) for models not recognized as 1M-class. */
@@ -20,6 +20,8 @@ const DEFAULT_WINDOW_TOKENS = 200_000;
 const LARGE_WINDOW_TOKENS = 1_000_000;
 /** Fallback chars-per-token ratio when transcript usage can't be read. */
 const CHARS_PER_TOKEN_FALLBACK = 4;
+/** Bounded tail-read size: files at or below this are read whole; larger ones are tailed. */
+const TAIL_READ_CHUNK_BYTES = 64 * 1024;
 
 export interface StepOptions {
   /** Percentage of the window each step represents, before clamping (e.g. 20). */
@@ -60,7 +62,7 @@ export function computeStep(windowTokens: number, opts: StepOptions): number {
 
 /** Model id → context window size. `[1m]` / `1m`-suffixed models get the large window. */
 export function windowForModel(model?: string): number {
-  if (model && /1m/i.test(model)) return LARGE_WINDOW_TOKENS;
+  if (model && /(?:\[1m\]|[\-_]1m$)/i.test(model)) return LARGE_WINDOW_TOKENS;
   return DEFAULT_WINDOW_TOKENS;
 }
 
@@ -71,8 +73,14 @@ export function windowForModel(model?: string): number {
  */
 export function readTranscriptTail(transcriptPath: string): TranscriptTail {
   let content: string;
+  let fileSize: number;
   try {
-    content = readFileSync(transcriptPath, "utf8");
+    fileSize = statSync(transcriptPath).size;
+    if (fileSize <= TAIL_READ_CHUNK_BYTES) {
+      content = readFileSync(transcriptPath, "utf8");
+    } else {
+      content = readTailBytes(transcriptPath, fileSize, TAIL_READ_CHUNK_BYTES);
+    }
   } catch {
     return {};
   }
@@ -106,13 +114,29 @@ export function readTranscriptTail(transcriptPath: string): TranscriptTail {
   }
 
   // No usable assistant usage entry anywhere in the transcript.
+  return { usageTokens: Math.floor(fileSize / CHARS_PER_TOKEN_FALLBACK) };
+}
+
+/**
+ * Reads only the last `chunkBytes` of a file and discards a possibly-truncated
+ * first line (no leading newline, or a line cut mid-JSON-object).
+ */
+function readTailBytes(path: string, fileSize: number, chunkBytes: number): string {
+  const fd = openSync(path, "r");
   try {
-    const size = statSync(transcriptPath).size;
-    return { usageTokens: Math.floor(size / CHARS_PER_TOKEN_FALLBACK) };
-  } catch {
-    return {};
+    const buffer = Buffer.alloc(chunkBytes);
+    const position = fileSize - chunkBytes;
+    const bytesRead = readSync(fd, buffer, 0, chunkBytes, position);
+    const chunk = buffer.toString("utf8", 0, bytesRead);
+    const firstNewline = chunk.indexOf("\n");
+    return firstNewline === -1 ? "" : chunk.slice(firstNewline + 1);
+  } finally {
+    closeSync(fd);
   }
 }
+
+/** Safe session id characters — Claude Code supplies a UUID in practice. */
+const SAFE_SESSION_ID = /^[A-Za-z0-9_-]+$/;
 
 function statePathFor(statePath: string, sessionId: string): string {
   return join(statePath, `${sessionId}.json`);
@@ -147,6 +171,7 @@ export function checkContextWatch(
   input: CheckContextWatchInput,
   opts: CheckContextWatchOptions,
 ): string | null {
+  if (!SAFE_SESSION_ID.test(input.sessionId)) return null;
   if (!existsSync(input.transcriptPath)) return null;
 
   const tail = readTranscriptTail(input.transcriptPath);

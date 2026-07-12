@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -47,7 +47,12 @@ describe("windowForModel", () => {
   it("detects 1m-class models", () => {
     expect(windowForModel("claude-sonnet-5[1m]")).toBe(1_000_000);
     expect(windowForModel("claude-opus-4-1m")).toBe(1_000_000);
-    expect(windowForModel("some-model-1M-context")).toBe(1_000_000);
+    expect(windowForModel("claude-opus-4_1m")).toBe(1_000_000);
+  });
+
+  it("does not misclassify a model id merely containing '1m' as a substring", () => {
+    expect(windowForModel("some-model-1M-context")).toBe(200_000);
+    expect(windowForModel("claude-haiku-51m")).toBe(200_000);
   });
 });
 
@@ -91,6 +96,24 @@ describe("readTranscriptTail", () => {
     writeFileSync(p, content);
     const tail = readTranscriptTail(p);
     expect(tail.usageTokens).toBe(Math.floor(content.length / 4));
+  });
+
+  it("finds the usage entry near the end of a transcript larger than the bounded-read chunk, without reading the whole file", () => {
+    const dir = tmpDir();
+    const p = join(dir, "transcript.jsonl");
+    // Many old lines, well past the 64 KB bounded-read chunk size.
+    const oldLine = JSON.stringify({ type: "user", message: { content: "x".repeat(200) } });
+    const oldLines = Array(2000).fill(oldLine); // ~450KB+ of old content
+    const realUsageLine = JSON.stringify(
+      assistantEntry({ input_tokens: 1234, cache_read_input_tokens: 6 }, "claude-sonnet-5"),
+    );
+    const content = [...oldLines, realUsageLine].join("\n") + "\n";
+    writeFileSync(p, content);
+    expect(content.length).toBeGreaterThan(64 * 1024);
+
+    const tail = readTranscriptTail(p);
+    expect(tail.usageTokens).toBe(1240);
+    expect(tail.model).toBe("claude-sonnet-5");
   });
 });
 
@@ -183,15 +206,30 @@ describe("checkContextWatch", () => {
     expect(msg).toBeNull();
   });
 
+  it("returns null and does not throw on an unsafe sessionId (path traversal)", () => {
+    const dir = tmpDir();
+    const transcriptPath = writeTranscript(dir, [assistantEntry({ input_tokens: 90_000 })]);
+    const statePath = join(dir, "state");
+    const msg = checkContextWatch(
+      { transcriptPath, sessionId: "../../etc/passwder" },
+      { ...DEFAULT_OPTS, statePath },
+    );
+    expect(msg).toBeNull();
+  });
+
   it("treats corrupt state file as lastStep 0", () => {
     const dir = tmpDir();
     const transcriptPath = writeTranscript(dir, [assistantEntry({ input_tokens: 90_000 })]);
     const statePath = join(dir, "state");
-    writeFileSync(join(statePath, "..", "placeholder"), ""); // ensure dir logic doesn't choke
+    mkdirSync(statePath, { recursive: true });
+    // Malformed JSON written directly at the real per-session state file path,
+    // so readState's JSON.parse catch is actually exercised.
+    writeFileSync(join(statePath, "s1.json"), "not-json");
     const msg = checkContextWatch(
       { transcriptPath, sessionId: "s1" },
       { ...DEFAULT_OPTS, statePath },
     );
     expect(msg).not.toBeNull();
+    expect(msg).toContain("45%");
   });
 });
