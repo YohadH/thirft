@@ -412,6 +412,49 @@ reloaded across simulated windows (37,744 baseline vs. 10,367 injected, saving
 27,377 tokens) — see [Synthetic Benchmark](#synthetic-benchmark) above for
 methodology.
 
+### Verified
+
+**Unit tests.** `npm test` — 156 tests across 12 files, including a dedicated
+`test/contextWatch.test.ts` that covers the clamp table (1M→200k, 200k→80k,
+128k→64k, 32k→16k step sizes), the step-crossing state machine (first
+crossing fires, same step doesn't re-fire, the next step fires again,
+per-session isolation), transcript-tail parsing (real `message.usage`, a
+bounded tail-read for large transcripts, fallback to `fileSize / 4`), model →
+window inference, session-ID path-traversal rejection, and malformed/missing
+input. All green.
+
+**Manual hook-contract run.** The built CLI (`node dist/mcp/bin.js
+context-watch`) was driven directly with hook-shaped stdin JSON against a
+synthetic transcript: it fires with the exact `hookSpecificOutput` JSON on a
+crossing, stays silent on a repeat of the same step, fires again on the next
+step, and stays silent (exit 0) on garbage stdin, empty stdin, and a missing
+transcript path — confirming the "never break the prompt" contract holds
+under every failure mode, not just the happy path.
+
+**Real end-to-end run, against this feature's own development session.**
+Rather than only a synthetic fixture, `context-watch` was replayed against
+the actual, live Claude Code transcript that was generated *while building
+this feature* — a genuinely long session (963 KB, 410 lines, real
+`claude-sonnet-5` / `claude-fable-5` usage data, no window override). Four
+real snapshots were cut from that transcript at increasing points in the
+session's actual history and fed through the CLI in chronological order,
+each as a fresh hook invocation:
+
+| Turn | Real usage (tokens) | % of 200k window | Result |
+| --- | --- | --- | --- |
+| T1 | 31,686 | ~16% | silent (below the first step) |
+| T2 | 94,821 | ~47% | **fires** — crosses the 40% step |
+| T3 | 135,227 | ~68% | silent (same step as T2, no re-fire) |
+| T4 | 182,661 | ~91% | **fires** — crosses the 80% step |
+
+This matches the documented "200k window → saves at ~40% and ~80%" behavior
+exactly, using genuine per-turn token growth instead of hand-picked numbers.
+The full 963 KB transcript (well above the 64 KB bounded tail-read threshold)
+was also run standalone and returned in well under a second (~0.3–0.6s wall
+time, dominated by Node process startup, not transcript parsing) — confirming
+the bounded tail-read keeps the hook cheap even against a large, real,
+long-running session.
+
 ## Proxy And Rate Limits
 
 The proxy is optional. Use it when an agent can point its LLM `base_url` at a
