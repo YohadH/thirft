@@ -404,6 +404,15 @@ step boundary is crossed, `PreCompact` prints compaction guidance as a safety
 net, and the pre-existing `SessionStart` hook reloads a budgeted memory slice
 immediately after — closing the loop so no durable fact is lost to compaction.
 
+**Delta saves, not re-saves:** each crossing now tags its guidance with a
+session-specific marker, `session:<sessionId>`, so the agent isn't just told
+to "save facts" blind every time. The injected instruction has the agent call
+`search_memory` for that tag first to see what it already stored this
+session, then save only genuinely new facts, tagging them the same way. That
+keeps later crossings in the same session from re-remembering the same fact
+over and over, and stops the agent from wrongly assuming something was
+already saved.
+
 **Opt out** by removing the `UserPromptSubmit` (and optionally `PreCompact`)
 entries from [`plugins/thrift-memory/hooks/hooks.json`](./plugins/thrift-memory/hooks/hooks.json).
 

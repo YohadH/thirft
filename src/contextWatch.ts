@@ -189,9 +189,12 @@ export function checkContextWatch(
   writeState(opts.statePath, input.sessionId, { lastStep: stepIndex });
 
   const pct = Math.round((100 * usage) / window);
+  const sessionTag = `session:${input.sessionId}`;
   const additionalContext =
-    `Context usage crossed ${pct}% of the model's window — pause, store durable session facts ` +
-    `via the Thrift remember tool, then suggest the user run /compact.`;
+    `Context usage crossed ${pct}% of the model's window — before saving, call ` +
+    `search_memory with tag "${sessionTag}" to see what you already stored ` +
+    `this session, then store only new durable facts via the Thrift remember ` +
+    `tool (tag them "${sessionTag}" too), and suggest the user run /compact.`;
   return JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "UserPromptSubmit",

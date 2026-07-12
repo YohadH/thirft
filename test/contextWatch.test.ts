@@ -133,6 +133,29 @@ describe("checkContextWatch", () => {
     expect(msg).toContain("hookSpecificOutput");
   });
 
+  it("instructs checking search_memory for the session tag before saving, and tagging new memories the same way", () => {
+    const dir = tmpDir();
+    const transcriptPath = writeTranscript(dir, [
+      assistantEntry({ input_tokens: 90_000 }, "claude-sonnet-5"), // 45% of 200k
+    ]);
+    const statePath = join(dir, "state");
+    const msg = checkContextWatch(
+      { transcriptPath, sessionId: "abc-123" },
+      { ...DEFAULT_OPTS, statePath },
+    );
+    expect(msg).not.toBeNull();
+    const parsed = JSON.parse(msg as string) as {
+      hookSpecificOutput: { hookEventName: string; additionalContext: string };
+    };
+    expect(parsed.hookSpecificOutput.hookEventName).toBe("UserPromptSubmit");
+    expect(parsed.hookSpecificOutput.additionalContext).toBe(
+      "Context usage crossed 45% of the model's window — before saving, call " +
+        'search_memory with tag "session:abc-123" to see what you already stored ' +
+        "this session, then store only new durable facts via the Thrift remember " +
+        'tool (tag them "session:abc-123" too), and suggest the user run /compact.',
+    );
+  });
+
   it("does not fire twice for the same step", () => {
     const dir = tmpDir();
     const transcriptPath = writeTranscript(dir, [assistantEntry({ input_tokens: 90_000 })]);
