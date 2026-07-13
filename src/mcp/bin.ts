@@ -7,10 +7,12 @@
  *   npx thrift-memory --store-path=/my/path/memories.jsonl --default-budget=4000
  *   npx thrift-memory audit           # scan this repo for agent memory files, report the token waste
  *   npx thrift-memory session-context # print a budgeted memory slice (for SessionStart hooks)
+ *   npx thrift-memory context-watch   # hook: detect context-% crossings, prompt to save memory + /compact
  *
  * Subcommand flags:
  *   audit:            --path= --sessions= --budget= --price-per-mtok=
  *   session-context:  --budget= --agent-id= --store-path= --meter-path=
+ *   context-watch:    --step-pct= --min-step-tokens= --max-step-pct= --window-tokens= --state-path=
  *
  * Env vars (lower precedence than CLI flags):
  *   THRIFT_STORE_PATH      path to JSONL store file
@@ -39,6 +41,7 @@ import { InMemoryMeter } from "../meter/inMemoryMeter.js";
 import { ControlSettings } from "../control/settings.js";
 import { auditMemoryFiles, renderAudit } from "../audit.js";
 import { buildSessionContext } from "../sessionContext.js";
+import { checkContextWatch } from "../contextWatch.js";
 import { ThriftMcpServer } from "./server.js";
 
 const argv = process.argv.slice(2);
@@ -151,20 +154,57 @@ if (positional[0] === "session-context") {
   process.exit(0);
 }
 
-const store = makeStore();
-const retriever = new ScopedRetriever();
-const meter = new InMemoryMeter();
-const server = new ThriftMcpServer({
-  store,
-  retriever,
-  meter,
-  defaultTokenBudget,
-  meterLogPath,
-  resolveBudget: (agentId, requested) =>
-    new ControlSettings({ path: controlPath }).effectiveBudget(agentId, requested),
-});
+if (positional[0] === "context-watch") {
+  // Hook contract: UserPromptSubmit hook — must never break the prompt flow.
+  // Any read/parse failure (stdin, transcript, state) resolves to silent exit 0.
+  (async () => {
+    try {
+      let raw = "";
+      for await (const chunk of process.stdin) raw += chunk;
+      const parsed = JSON.parse(raw) as { transcript_path?: string; session_id?: string };
+      const transcriptPath = parsed.transcript_path;
+      const sessionId = parsed.session_id;
+      if (!transcriptPath || !sessionId) {
+        process.exit(0);
+        return;
+      }
+      const message = checkContextWatch(
+        { transcriptPath, sessionId },
+        {
+          stepPct: intFlag("step-pct", 20),
+          minStepTokens: intFlag("min-step-tokens", 80_000),
+          maxStepPct: intFlag("max-step-pct", 50),
+          statePath: flag("state-path") ?? join(homedir(), ".thrift", "context-watch"),
+          windowTokens: flag("window-tokens") !== undefined ? intFlag("window-tokens", 0) : undefined,
+        },
+      );
+      if (message) console.log(message);
+    } catch {
+      // Silent by design — a hook must never surface noise or break the prompt.
+    } finally {
+      process.exit(0);
+    }
+  })();
+} else {
+  runServer();
+}
 
-server.runStdio().catch((err: unknown) => {
-  console.error("[thrift-mcp] fatal:", err);
-  process.exit(1);
-});
+function runServer(): void {
+  const store = makeStore();
+  const retriever = new ScopedRetriever();
+  const meter = new InMemoryMeter();
+  const server = new ThriftMcpServer({
+    store,
+    retriever,
+    meter,
+    defaultTokenBudget,
+    meterLogPath,
+    resolveBudget: (agentId, requested) =>
+      new ControlSettings({ path: controlPath }).effectiveBudget(agentId, requested),
+  });
+
+  server.runStdio().catch((err: unknown) => {
+    console.error("[thrift-mcp] fatal:", err);
+    process.exit(1);
+  });
+}

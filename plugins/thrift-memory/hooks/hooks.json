@@ -9,6 +9,26 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx --prefer-offline --yes thrift-memory context-watch"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"console.log('Preserve every durable decision, convention, and open task; explicitly list facts already stored to Thrift memory.')\""
+          }
+        ]
+      }
     ]
   }
 }
